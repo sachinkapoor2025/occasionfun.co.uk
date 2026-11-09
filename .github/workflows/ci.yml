@@ -1,13 +1,23 @@
 # GitHub Actions CI — installs packages during the pipeline run (not from the repo).
 name: CI
 
-on:
+# Quote "on" so YAML parsers never treat it as a boolean.
+"on":
   push:
     branches: [main, master, demo]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
+    name: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -18,7 +28,7 @@ jobs:
       - name: Use Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version-file: ".nvmrc"
+          node-version: "24"
           cache: npm
 
       - name: Install dependencies (pipeline only)
