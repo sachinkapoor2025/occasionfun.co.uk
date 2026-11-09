@@ -1,7 +1,7 @@
 # Azure DevOps pipeline — build static Next.js export and upload to S3 (eu-west-2).
 # Do not commit node_modules; install during the pipeline with npm ci.
-# Set variable group / secret variables:
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN (optional for temp creds)
+# Set secret pipeline variables (permanent IAM user keys):
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 
 trigger:
   branches:
@@ -72,5 +72,4 @@ stages:
             env:
               AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
               AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-              AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
               AWS_DEFAULT_REGION: $(AWS_DEFAULT_REGION)

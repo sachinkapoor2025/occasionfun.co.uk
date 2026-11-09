@@ -30,11 +30,12 @@ Set these repository secrets (Settings → Secrets and variables → Actions):
 
 | Secret | Purpose |
 | --- | --- |
-| `AWS_ACCESS_KEY_ID` | Deploy identity |
-| `AWS_SECRET_ACCESS_KEY` | Deploy identity |
-| `AWS_SESSION_TOKEN` | Required for temporary STS/SSO credentials |
+| `AWS_ACCESS_KEY_ID` | Permanent IAM access key id (exact name — not `WS_ACCESS_KEY_ID`) |
+| `AWS_SECRET_ACCESS_KEY` | Permanent IAM secret access key |
 
-Temporary session credentials expire (e.g. ~6 hours). Replace with a long-lived IAM user (least-privilege `s3:PutObject`/`DeleteObject`/`ListBucket` on these buckets) for lasting CI.
+Do **not** set `AWS_SESSION_TOKEN` when using permanent IAM user keys.
+
+One-time S3 bucket + Route 53 alias setup was done with temporary admin credentials. Ongoing deploys only need S3 sync permission via the permanent keys above.
 
 ## Azure Pipelines
 
