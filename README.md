@@ -76,7 +76,12 @@ Company details and partner identity live in `src/config/company.ts`. Unverified
 
 ## Hosting decision
 
-**AWS Amplify Hosting** is the selected option because the contact API requires Next.js server runtime. S3 + CloudFront is appropriate only for a fully static export without server routes. Details, DNS/HTTPS, CI/CD and rollback: `DEPLOYMENT.md`.
+**Amazon S3 static website hosting in `eu-west-2` (London)** is the selected option.
+
+- Buckets: `occasionfun.co.uk` (+ `www.occasionfun.co.uk` redirect)
+- Route 53 apex/www alias to the S3 website endpoint
+- GitHub Actions / Azure Pipelines run `npm ci`, static export to `out/`, then `aws s3 sync`
+- Details: `DEPLOYMENT.md`
 
 ## Important constraints
 
