@@ -1,9 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Static export for Amazon S3 website hosting (eu-west-2).
+  output: "export",
+  images: {
+    unoptimized: true,
+  },
+  // Generate /about/index.html so S3 website hosting resolves clean URLs.
+  trailingSlash: true,
   turbopack: {
     rules: {
       "*.css": {

@@ -4,7 +4,11 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { enquiryTypes, type EnquiryType } from "@/config/company";
 import { Button } from "@/components/ui/Button";
-import type { ContactFormErrors } from "@/lib/validation";
+import {
+  contactFormSchema,
+  formatZodErrors,
+  type ContactFormErrors,
+} from "@/lib/validation";
 
 type FormState = {
   name: string;
@@ -59,32 +63,69 @@ export function ContactForm() {
     setErrors({});
     setStatusMessage("");
 
+    const parsed = contactFormSchema.safeParse(form);
+    if (!parsed.success) {
+      setErrors(formatZodErrors(parsed.error));
+      setStatus("error");
+      setStatusMessage("Please correct the highlighted fields.");
+      return;
+    }
+
+    // Honeypot filled — pretend success without sending.
+    if (parsed.data.companyWebsite) {
+      setStatus("success");
+      setStatusMessage("Thank you. Your enquiry has been received.");
+      setForm(initialState);
+      return;
+    }
+
+    const endpoint = process.env.NEXT_PUBLIC_CONTACT_ENDPOINT;
+
     try {
-      const response = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-
-      const payload = (await response.json()) as {
-        ok?: boolean;
-        message?: string;
-        errors?: ContactFormErrors;
-      };
-
-      if (!response.ok) {
-        setErrors(payload.errors ?? {});
-        setStatus("error");
-        setStatusMessage(
-          payload.message ?? "We could not send your enquiry. Please try again.",
+      if (endpoint) {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parsed.data),
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          ok?: boolean;
+          message?: string;
+          errors?: ContactFormErrors;
+        };
+        if (!response.ok) {
+          setErrors(payload.errors ?? {});
+          setStatus("error");
+          setStatusMessage(
+            payload.message ??
+              "We could not send your enquiry. Please try again.",
+          );
+          return;
+        }
+      } else {
+        // Static S3 hosting has no server API — fall back to the visitor's mail client.
+        const subject = encodeURIComponent(
+          `OCCASIONFUN LTD enquiry: ${parsed.data.enquiryType}`,
         );
-        return;
+        const body = encodeURIComponent(
+          [
+            `Name: ${parsed.data.name}`,
+            `Organisation: ${parsed.data.organisation}`,
+            `Email: ${parsed.data.email}`,
+            `Phone: ${parsed.data.phone || "—"}`,
+            `Type: ${parsed.data.enquiryType}`,
+            "",
+            parsed.data.message,
+          ].join("\n"),
+        );
+        window.location.href = `mailto:enquiries@occasionfun.co.uk?subject=${subject}&body=${body}`;
       }
 
       setStatus("success");
       setStatusMessage(
-        payload.message ??
-          "Thank you. Your enquiry has been received and will be reviewed.",
+        endpoint
+          ? "Thank you. Your enquiry has been received and will be reviewed."
+          : "Thank you. Your email client should open with the enquiry details. If it does not, email enquiries@occasionfun.co.uk.",
       );
       setForm(initialState);
     } catch {

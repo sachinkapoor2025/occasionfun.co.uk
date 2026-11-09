@@ -1,7 +1,7 @@
-# GitHub Actions CI — installs packages during the pipeline run (not from the repo).
+# GitHub Actions — build static site and deploy to S3 (eu-west-2).
+# Dependencies are installed in the pipeline (never commit node_modules).
 name: CI
 
-# Quote "on" so YAML parsers never treat it as a boolean.
 "on":
   push:
     branches: [main, master, demo]
@@ -20,6 +20,9 @@ jobs:
     name: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SITE_URL: https://occasionfun.co.uk
+      FAIL_ON_PLACEHOLDERS: "false"
 
     steps:
       - name: Checkout
@@ -46,8 +49,53 @@ jobs:
       - name: Test
         run: npm run test
 
-      - name: Production build
+      - name: Production static export
         run: npm run build
-        env:
-          NEXT_PUBLIC_SITE_URL: https://occasionfun.co.uk
-          FAIL_ON_PLACEHOLDERS: "false"
+
+      - name: Upload static site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-out
+          path: out
+          retention-days: 7
+
+  deploy-s3:
+    name: deploy-s3
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AWS_DEFAULT_REGION: eu-west-2
+      S3_BUCKET: occasionfun.co.uk
+
+    steps:
+      - name: Download static site
+        uses: actions/download-artifact@v4
+        with:
+          name: site-out
+          path: out
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: eu-west-2
+
+      - name: Sync to S3 (London)
+        run: |
+          aws s3 sync out/ "s3://${S3_BUCKET}/" --delete \
+            --cache-control "public,max-age=300" \
+            --exclude "*.html" \
+            --exclude "*.xml" \
+            --exclude "*.txt"
+          aws s3 sync out/ "s3://${S3_BUCKET}/" --delete \
+            --cache-control "public,max-age=60" \
+            --exclude "*" \
+            --include "*.html" \
+            --include "*.xml" \
+            --include "*.txt"
+          echo "Website: http://${S3_BUCKET}.s3-website.eu-west-2.amazonaws.com"
+          echo "Domain:  http://occasionfun.co.uk"

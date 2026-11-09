@@ -1,3 +1,7 @@
+/**
+ * Reference contact API handler for non-static deployments (Amplify/Lambda).
+ * Not included in the S3 static export build — see ContactForm mailto / NEXT_PUBLIC_CONTACT_ENDPOINT.
+ */
 import { NextResponse } from "next/server";
 import { company } from "@/config/company";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -35,7 +39,6 @@ export async function POST(request: Request) {
   }
 
   const parsed = contactFormSchema.safeParse(body);
-
   if (!parsed.success) {
     return NextResponse.json(
       {
@@ -47,7 +50,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Honeypot filled → silently accept without processing.
   if (parsed.data.companyWebsite) {
     return NextResponse.json({
       ok: true,
@@ -58,7 +60,6 @@ export async function POST(request: Request) {
   const notifyTo = process.env.CONTACT_NOTIFY_EMAIL;
   const webhookUrl = process.env.CONTACT_WEBHOOK_URL;
 
-  // Persist / notify through configured backends. Credentials never ship to the browser.
   if (webhookUrl) {
     try {
       await fetch(webhookUrl, {
@@ -89,20 +90,6 @@ export async function POST(request: Request) {
         { status: 502 },
       );
     }
-  } else if (process.env.NODE_ENV === "production") {
-    console.warn(
-      "CONTACT_WEBHOOK_URL is not configured. Enquiry validated but not forwarded.",
-      {
-        enquiryType: parsed.data.enquiryType,
-        organisation: parsed.data.organisation,
-      },
-    );
-  } else {
-    console.info("Contact enquiry accepted (dev, no webhook configured)", {
-      enquiryType: parsed.data.enquiryType,
-      organisation: parsed.data.organisation,
-      email: parsed.data.email,
-    });
   }
 
   return NextResponse.json({

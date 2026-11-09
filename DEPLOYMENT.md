@@ -1,85 +1,58 @@
-# Deployment guide — OCCASIONFUN LTD
+# Deployment guide — OCCASIONFUN LTD (S3 static hosting)
 
-## Hosting recommendation
+## Selected hosting: Amazon S3 (eu-west-2 / London)
 
-**Selected option: AWS Amplify Hosting**
+The site is a **static Next.js export** (`output: "export"`) synced to S3 website hosting.
 
-### Why Amplify (not S3 + CloudFront static hosting)
-
-This site is a Next.js App Router application with:
-
-- A server-side `/api/contact` route (Zod validation, rate limiting, webhook notification)
-- Dynamic metadata helpers and App Router conventions
-- Runtime environment variables for enquiry delivery
-
-Those features need a Next.js-compatible server/runtime. A pure S3 static export would drop the contact API unless a separate backend was maintained in parallel.
-
-Use **Amazon S3 + CloudFront** only if the contact form is later moved to an external managed form/API and the Next.js app is converted to a fully static export.
-
-## Environments
-
-Maintain at least:
-
-| Environment | Purpose |
+| Resource | Value |
 | --- | --- |
-| Development | Local `npm run dev` |
-| Staging | Amplify branch preview / staging app |
-| Production | Live custom domain |
+| Region | `eu-west-2` (London) |
+| Apex bucket | `occasionfun.co.uk` |
+| WWW bucket | `www.occasionfun.co.uk` (redirects to apex) |
+| Website endpoint | `http://occasionfun.co.uk.s3-website.eu-west-2.amazonaws.com` |
+| Route 53 zone | `occasionfun.co.uk` (`Z01121381OR3CHAAZGTH7`) |
 
-## Required environment variables
+Amplify / Cloud Run are not required for this static setup.
 
-Copy `.env.example` and set:
+### HTTPS note
 
-- `NEXT_PUBLIC_SITE_URL` — canonical public URL (include `https://`)
-- `CONTACT_NOTIFY_EMAIL` — verified company mailbox for notifications
-- `CONTACT_WEBHOOK_URL` — HTTPS endpoint that receives validated enquiries (API Gateway + Lambda, or equivalent)
-- `FAIL_ON_PLACEHOLDERS` — set `true` in production CI once placeholders are replaced
-
-Never commit secrets. Prefer Amplify environment variables / AWS Secrets Manager for credentials used by the webhook worker (for example SES credentials).
+S3 website endpoints serve **HTTP only**. For HTTPS on the live domain, place CloudFront (+ ACM certificate in `us-east-1`) in front of the bucket later. Route 53 currently aliases the apex to the S3 website endpoint.
 
 ## Packages are installed in the pipeline — never commit `node_modules`
 
-- `node_modules/` is gitignored and must stay out of GitHub.
+- `node_modules/` is gitignored.
 - Commit `package.json` and `package-lock.json` only.
-- Amplify (`amplify.yml`) and GitHub Actions (`.github/workflows/ci.yml`) both run `npm ci` so dependencies are built/installed during the pipeline.
-- Do not upload or vendor `node_modules` into the repository.
+- GitHub Actions and Azure Pipelines both run `npm ci` then `npm run build` (static `out/`) then `aws s3 sync`.
 
-## Amplify setup (high level)
+## GitHub Actions secrets
 
-1. Create an Amplify Hosting app connected to this repository.
-2. Confirm Amplify’s current Next.js SSR/runtime support for the installed Next.js version before go-live.
-3. Use the repo `amplify.yml` build settings (Node 24 → `npm ci` → test/lint/typecheck → `npm run build`).
-4. Configure environment variables per environment.
-5. Attach the custom domain and request an ACM certificate through Amplify/DNS guidance for the domain region workflow Amplify requires.
-6. Point DNS (Route 53 or external DNS) to the Amplify domain targets.
-7. Enforce HTTPS only.
-8. Enable branch previews for pull requests if desired.
+Set these repository secrets (Settings → Secrets and variables → Actions):
 
-## Contact form backend pattern
+| Secret | Purpose |
+| --- | --- |
+| `AWS_ACCESS_KEY_ID` | Deploy identity |
+| `AWS_SECRET_ACCESS_KEY` | Deploy identity |
+| `AWS_SESSION_TOKEN` | Required for temporary STS/SSO credentials |
 
-Recommended production pattern:
+Temporary session credentials expire (e.g. ~6 hours). Replace with a long-lived IAM user (least-privilege `s3:PutObject`/`DeleteObject`/`ListBucket` on these buckets) for lasting CI.
 
-1. Browser posts to `/api/contact`
-2. Route validates with Zod, applies rate limiting, ignores honeypot spam
-3. Route forwards a minimised payload to `CONTACT_WEBHOOK_URL`
-4. Lambda (or equivalent) stores the enquiry securely and sends email via Amazon SES to `CONTACT_NOTIFY_EMAIL`
-5. Retention/deletion process is defined before collecting real personal data
+## Azure Pipelines
 
-Do not expose AWS keys, SES credentials or mailbox credentials in frontend code.
+See `azure-pipelines.yml`. Configure the same AWS variables as secret pipeline variables.
 
-## Security headers and operations
+## Local build and manual deploy
 
-- Prefer Amplify/CloudFront security headers (CSP as practical, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`)
-- Use least-privilege IAM roles for build and runtime services
-- Enable monitoring/error logging without collecting unnecessary personal data
-- Keep dependencies updated; run `npm audit` as part of maintenance
+```bash
+npm ci
+NEXT_PUBLIC_SITE_URL=https://occasionfun.co.uk npm run build
+aws s3 sync out/ s3://occasionfun.co.uk/ --delete --region eu-west-2
+```
 
-## Rollback
+## Contact form on static hosting
 
-1. In Amplify, redeploy the previous successful job/artifact for the production branch.
-2. If a bad DNS change was made, revert DNS to the last known good Amplify target.
-3. If the contact webhook misbehaves, disable `CONTACT_WEBHOOK_URL` only as an emergency measure and communicate downtime; validated submissions will not be forwarded until restored.
+There is no server `/api/contact` on S3. The form validates in the browser and either:
 
-## Cost note
+1. Posts to `NEXT_PUBLIC_CONTACT_ENDPOINT` if configured, or
+2. Opens a `mailto:` draft to `enquiries@occasionfun.co.uk`.
 
-Do not treat any figure as a guaranteed monthly cost. After Amplify app size, traffic, SES volume and log retention are known, estimate from current AWS pricing for Amplify Hosting, SES, Lambda/API Gateway (if used), Route 53 and certificate/DNS charges.
+A reference Lambda-style handler remains in `src/server/contact-api.reference.ts` if you later add API Gateway.
