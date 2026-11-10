@@ -4,6 +4,7 @@ frontend:
     preBuild:
       commands:
         - npm ci
+        - npm ci --prefix infra/contact-api
     build:
       commands:
         # Next.js inlines NEXT_PUBLIC_* at build time. Amplify console variables
