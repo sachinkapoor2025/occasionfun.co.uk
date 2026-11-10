@@ -34,9 +34,15 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            infra/contact-api/package-lock.json
 
-      - name: Install dependencies (pipeline only)
+      - name: Install frontend dependencies
         run: npm ci
+
+      - name: Install contact API dependencies
+        run: npm ci --prefix infra/contact-api
 
       - name: Lint
         run: npm run lint
@@ -44,11 +50,17 @@ jobs:
       - name: Generate Next.js types
         run: npx next typegen
 
-      - name: Typecheck
+      - name: Typecheck frontend
         run: npm run typecheck
 
-      - name: Test
+      - name: Test frontend
         run: npm run test
+
+      - name: Typecheck contact API
+        run: npm run typecheck --prefix infra/contact-api
+
+      - name: Test contact API
+        run: npm test --prefix infra/contact-api
 
       - name: Production static export
         run: npm run build
