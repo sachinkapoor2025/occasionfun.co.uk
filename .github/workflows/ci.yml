@@ -1,5 +1,6 @@
-# GitHub Actions — build static site and deploy to S3 (eu-west-2).
-# Dependencies are installed in the pipeline (never commit node_modules).
+# GitHub Actions — CI only.
+# Amplify Hosting is the planned deployment platform. This workflow must not
+# deploy to S3. Dependencies are installed in the pipeline (never commit node_modules).
 name: CI
 
 "on":
@@ -58,43 +59,3 @@ jobs:
           name: site-out
           path: out
           retention-days: 7
-
-  deploy-s3:
-    name: deploy-s3
-    needs: build
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      AWS_DEFAULT_REGION: eu-west-2
-      S3_BUCKET: occasionfun.co.uk
-
-    steps:
-      - name: Download static site
-        uses: actions/download-artifact@v4
-        with:
-          name: site-out
-          path: out
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-2
-
-      - name: Sync to S3 (London)
-        run: |
-          aws s3 sync out/ "s3://${S3_BUCKET}/" --delete \
-            --cache-control "public,max-age=300" \
-            --exclude "*.html" \
-            --exclude "*.xml" \
-            --exclude "*.txt"
-          aws s3 sync out/ "s3://${S3_BUCKET}/" --delete \
-            --cache-control "public,max-age=60" \
-            --exclude "*" \
-            --include "*.html" \
-            --include "*.xml" \
-            --include "*.txt"
-          echo "Website: http://${S3_BUCKET}.s3-website.eu-west-2.amazonaws.com"
-          echo "Domain:  http://occasionfun.co.uk"

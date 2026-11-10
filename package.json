@@ -16,7 +16,6 @@
     "test:watch": "vitest",
     "check:placeholders": "node scripts/check-placeholders.mjs",
     "smoke:local": "node scripts/smoke-local.mjs",
-    "deploy:s3": "aws s3 sync out/ s3://${S3_BUCKET:-occasionfun.co.uk}/ --delete --region ${AWS_DEFAULT_REGION:-eu-west-2}",
     "format": "prettier --write ."
   },
   "dependencies": {

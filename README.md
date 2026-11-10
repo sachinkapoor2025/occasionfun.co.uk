@@ -11,7 +11,7 @@ Built from `OCCASIONFUN_LTD_Cursor_Website_Build_Spec.md`.
 - Tailwind CSS v4
 - Zod server-side form validation
 - Vitest for route/content and form validation tests
-- AWS Amplify Hosting recommended (see `DEPLOYMENT.md`)
+- AWS Amplify Hosting is the planned platform (see `DEPLOYMENT.md`). It has not been created or deployed yet.
 
 ## Local setup
 
@@ -74,14 +74,13 @@ No secrets belong in client-side code.
 
 Company details and partner identity live in `src/config/company.ts`. Unverified values use `[INSERT ...]` placeholders and must be replaced before launch. See `PRE_LAUNCH_CHECKLIST.md`.
 
-## Hosting decision
+## Hosting
 
-**Amazon S3 static website hosting in `eu-west-2` (London)** is the selected option.
+**AWS Amplify static hosting in `eu-west-2` (London)** is the planned platform. No Amplify application has been created or deployed yet. Details are in `DEPLOYMENT.md`.
 
-- Buckets: `occasionfun.co.uk` (+ `www.occasionfun.co.uk` redirect)
-- Route 53 apex/www alias to the S3 website endpoint
-- GitHub Actions / Azure Pipelines run `npm ci`, static export to `out/`, then `aws s3 sync`
-- Details: `DEPLOYMENT.md`
+- GitHub Actions is CI only. It does not deploy the site.
+- `demo` is preview and staging. Its canonical URL is the Amplify-generated preview URL.
+- `main` is production. `https://occasionfun.co.uk` is used after approved changes are merged and DNS is confirmed.
 
 ## Important constraints
 

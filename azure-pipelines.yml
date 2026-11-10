@@ -1,21 +1,17 @@
-# Azure DevOps pipeline — build static Next.js export and upload to S3 (eu-west-2).
+# Azure DevOps pipeline — CI only.
+# Automatic triggers for main, master, and demo are disabled.
+# The Deploy stage is retained so its history stays visible, and it cannot
+# run. Amplify Hosting is the planned deployment platform. Do not sync the
+# production bucket from this pipeline.
 # Do not commit node_modules; install during the pipeline with npm ci.
-# Set secret pipeline variables (permanent IAM user keys):
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 
-trigger:
-  branches:
-    include:
-      - main
-      - master
-      - demo
+trigger: none
+pr: none
 
 pool:
   vmImage: ubuntu-latest
 
 variables:
-  AWS_DEFAULT_REGION: eu-west-2
-  S3_BUCKET: occasionfun.co.uk
   NEXT_PUBLIC_SITE_URL: https://occasionfun.co.uk
   FAIL_ON_PLACEHOLDERS: "false"
 
@@ -47,29 +43,14 @@ stages:
             displayName: Publish out/ artifact
 
   - stage: Deploy
-    displayName: Deploy to S3 London
+    displayName: Deploy disabled
     dependsOn: Build
-    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    condition: false
     jobs:
       - job: deploy
-        displayName: aws s3 sync
+        displayName: S3 deployment disabled
         steps:
-          - download: current
-            artifact: site-out
-
-          - task: UsePythonVersion@0
-            inputs:
-              versionSpec: "3.x"
-
-          - script: pip install awscli
-            displayName: Install AWS CLI
-
           - script: |
-              aws s3 sync "$(Pipeline.Workspace)/site-out/" "s3://$(S3_BUCKET)/" --delete \
-                --region "$(AWS_DEFAULT_REGION)"
-              echo "Deployed to s3://$(S3_BUCKET)/ (eu-west-2 website hosting)"
-            displayName: Sync static files to S3
-            env:
-              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-              AWS_DEFAULT_REGION: $(AWS_DEFAULT_REGION)
+              echo "Deploy stage is disabled and must not publish to S3."
+              exit 1
+            displayName: Refuse S3 deployment

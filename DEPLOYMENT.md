@@ -1,8 +1,23 @@
-# Deployment guide — OCCASIONFUN LTD (S3 static hosting)
+# Deployment guide — OCCASIONFUN LTD
 
-## Selected hosting: Amazon S3 (eu-west-2 / London)
+The site is a **static Next.js export** (`output: "export"`). The build writes `out/`.
 
-The site is a **static Next.js export** (`output: "export"`) synced to S3 website hosting.
+## Planned hosting
+
+AWS Amplify Hosting in `eu-west-2` (London), with Amplify-managed CloudFront, is the planned platform. No Amplify application has been created, connected, or deployed.
+
+| Branch | Role and URL |
+| --- | --- |
+| `demo` | Preview and staging. Set `NEXT_PUBLIC_SITE_URL` to the Amplify-generated preview URL before that build. |
+| `main` | Production. Use `https://occasionfun.co.uk` only after approved changes are merged into `main` and DNS is confirmed. |
+
+GitHub Actions (`.github/workflows/ci.yml`) is CI only. It runs `npm ci`, lint, typecheck, tests, and `npm run build`, then uploads the `out/` artifact. It does not deploy the website.
+
+Azure Pipelines does not start on branch pushes. Its Build stage runs the same checks. It does not deploy.
+
+## Existing website records
+
+These records describe the current website setup. They are not the deployment path in this repository.
 
 | Resource | Value |
 | --- | --- |
@@ -12,46 +27,28 @@ The site is a **static Next.js export** (`output: "export"`) synced to S3 websit
 | Website endpoint | `http://occasionfun.co.uk.s3-website.eu-west-2.amazonaws.com` |
 | Route 53 zone | `occasionfun.co.uk` (`Z01121381OR3CHAAZGTH7`) |
 
-Amplify / Cloud Run are not required for this static setup.
-
 ### HTTPS note
 
-S3 website endpoints serve **HTTP only**. For HTTPS on the live domain, place CloudFront (+ ACM certificate in `us-east-1`) in front of the bucket later. Route 53 currently aliases the apex to the S3 website endpoint.
+S3 website endpoints serve **HTTP only**. For HTTPS on the live domain, place CloudFront (+ ACM certificate in `us-east-1`) in front of the bucket later. Route 53 currently aliases the apex to the S3 website endpoint. Do not attach `occasionfun.co.uk` to Amplify until the production deployment is authorized.
 
 ## Packages are installed in the pipeline — never commit `node_modules`
 
 - `node_modules/` is gitignored.
 - Commit `package.json` and `package-lock.json` only.
-- GitHub Actions and Azure Pipelines both run `npm ci` then `npm run build` (static `out/`) then `aws s3 sync`.
+- GitHub Actions and Azure Pipelines run `npm ci` then `npm run build` (static `out/`). They do not sync the site to S3.
 
-## GitHub Actions secrets
-
-Set these repository secrets (Settings → Secrets and variables → Actions):
-
-| Secret | Purpose |
-| --- | --- |
-| `AWS_ACCESS_KEY_ID` | Permanent IAM access key id (exact name — not `WS_ACCESS_KEY_ID`) |
-| `AWS_SECRET_ACCESS_KEY` | Permanent IAM secret access key |
-
-Do **not** set `AWS_SESSION_TOKEN` when using permanent IAM user keys.
-
-One-time S3 bucket + Route 53 alias setup was done with temporary admin credentials. Ongoing deploys only need S3 sync permission via the permanent keys above.
-
-## Azure Pipelines
-
-See `azure-pipelines.yml`. Configure the same AWS variables as secret pipeline variables.
-
-## Local build and manual deploy
+## Local build
 
 ```bash
 npm ci
 NEXT_PUBLIC_SITE_URL=https://occasionfun.co.uk npm run build
-aws s3 sync out/ s3://occasionfun.co.uk/ --delete --region eu-west-2
 ```
+
+For a `demo` preview build, set `NEXT_PUBLIC_SITE_URL` to that branch's Amplify URL instead of the production domain.
 
 ## Contact form on static hosting
 
-There is no server `/api/contact` on S3. The form validates in the browser and either:
+There is no server `/api/contact` on the static export. The form validates in the browser and either:
 
 1. Posts to `NEXT_PUBLIC_CONTACT_ENDPOINT` if configured, or
 2. Opens a `mailto:` draft to `enquiries@occasionfun.co.uk`.
