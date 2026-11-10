@@ -48,9 +48,12 @@ For a `demo` preview build, set `NEXT_PUBLIC_SITE_URL` to that branch's Amplify 
 
 ## Contact form on static hosting
 
-There is no server `/api/contact` on the static export. The form validates in the browser and either:
+There is no server `/api/contact` on the static export. The form reads `NEXT_PUBLIC_CONTACT_ENDPOINT` at build time. The URL is not hardcoded in the application source. If that variable is missing, the form shows a configuration error and does not submit the enquiry.
 
-1. Posts to `NEXT_PUBLIC_CONTACT_ENDPOINT` if configured, or
-2. Opens a `mailto:` draft to `enquiries@occasionfun.co.uk`.
+For the Amplify `demo` branch, set this environment variable before the static build:
 
-A reference Lambda-style handler remains in `src/server/contact-api.reference.ts` if you later add API Gateway.
+`NEXT_PUBLIC_CONTACT_ENDPOINT=https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact`
+
+`amplify.yml` writes `NEXT_PUBLIC_*` into `.env.production` during the Amplify build, and supplies the value above for `demo` when the Amplify console variable is absent. Set the same variable on the `demo` branch in the Amplify console to override it. Do not set this demo endpoint on `main`.
+
+The form shows the received-success message only when the API responds that the lead was saved and `notification` is `sent`. A saved enquiry whose notification is still `pending` or `sending`, including HTTP 202, stays on the delayed-delivery message.

@@ -1,0 +1,26 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        # Next.js inlines NEXT_PUBLIC_* at build time. Amplify console variables
+        # are copied into .env.production so the static export can see them.
+        # The demo branch uses the deployed contact API when the console
+        # variable is not already set. Production builds do not receive it here.
+        - |
+          if [ "$AWS_BRANCH" = "demo" ] && [ -z "${NEXT_PUBLIC_CONTACT_ENDPOINT:-}" ]; then
+            export NEXT_PUBLIC_CONTACT_ENDPOINT="https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact"
+          fi
+          touch .env.production
+          env | grep '^NEXT_PUBLIC_' >> .env.production || true
+          npm run build
+  artifacts:
+    baseDirectory: out
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - node_modules/**/*

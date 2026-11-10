@@ -48,9 +48,9 @@ export function ContactForm() {
 
   const [form, setForm] = useState<FormState>(startingState);
   const [errors, setErrors] = useState<ContactFormErrors>({});
-  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">(
-    "idle",
-  );
+  const [status, setStatus] = useState<
+    "idle" | "submitting" | "success" | "processing" | "pending" | "error"
+  >("idle");
   const [statusMessage, setStatusMessage] = useState("");
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -80,54 +80,67 @@ export function ContactForm() {
     }
 
     const endpoint = process.env.NEXT_PUBLIC_CONTACT_ENDPOINT;
+    if (!endpoint) {
+      setStatus("error");
+      setStatusMessage(
+        "The contact service is not configured. Your enquiry was not sent.",
+      );
+      return;
+    }
 
     try {
-      if (endpoint) {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(parsed.data),
-        });
-        const payload = (await response.json().catch(() => ({}))) as {
-          ok?: boolean;
-          message?: string;
-          errors?: ContactFormErrors;
-        };
-        if (!response.ok) {
-          setErrors(payload.errors ?? {});
-          setStatus("error");
-          setStatusMessage(
-            payload.message ??
-              "We could not send your enquiry. Please try again.",
-          );
-          return;
-        }
-      } else {
-        // Static S3 hosting has no server API — fall back to the visitor's mail client.
-        const subject = encodeURIComponent(
-          `OCCASIONFUN LTD enquiry: ${parsed.data.enquiryType}`,
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        saved?: boolean;
+        notification?: string;
+        message?: string;
+        errors?: ContactFormErrors;
+      };
+      const saved = payload.saved === true;
+      const delivered =
+        response.ok === true &&
+        payload.ok === true &&
+        payload.saved === true &&
+        payload.notification === "sent";
+
+      if (!saved) {
+        setErrors(payload.errors ?? {});
+        setStatus("error");
+        setStatusMessage(
+          payload.message ?? "We could not save your enquiry. Please try again.",
         );
-        const body = encodeURIComponent(
-          [
-            `Name: ${parsed.data.name}`,
-            `Organisation: ${parsed.data.organisation}`,
-            `Email: ${parsed.data.email}`,
-            `Phone: ${parsed.data.phone || "—"}`,
-            `Type: ${parsed.data.enquiryType}`,
-            "",
-            parsed.data.message,
-          ].join("\n"),
-        );
-        window.location.href = `mailto:enquiries@occasionfun.co.uk?subject=${subject}&body=${body}`;
+        return;
       }
 
-      setStatus("success");
+      if (delivered) {
+        setStatus("success");
+        setStatusMessage(
+          payload.message ??
+            "Thank you. Your enquiry has been received and will be reviewed.",
+        );
+        setForm(initialState);
+        return;
+      }
+
+      if (payload.notification === "sending") {
+        setStatus("processing");
+        setStatusMessage(
+          payload.message ??
+            "Your enquiry was saved. Notification is already being processed.",
+        );
+        return;
+      }
+
+      setStatus("pending");
       setStatusMessage(
-        endpoint
-          ? "Thank you. Your enquiry has been received and will be reviewed."
-          : "Thank you. Your email client should open with the enquiry details. If it does not, email enquiries@occasionfun.co.uk.",
+        payload.message ??
+          "Your enquiry was saved. The notification email is delayed and will be retried.",
       );
-      setForm(initialState);
     } catch {
       setStatus("error");
       setStatusMessage(
@@ -145,6 +158,7 @@ export function ContactForm() {
       noValidate
       className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-[var(--shadow-soft)]"
       aria-describedby="contact-form-status"
+      aria-busy={status === "submitting" || status === "processing"}
     >
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
@@ -340,12 +354,16 @@ export function ContactForm() {
         id="contact-form-status"
         role="status"
         aria-live="polite"
+        aria-atomic="true"
+        data-state={status}
         className={
           status === "success"
             ? "rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-success"
             : status === "error"
               ? "rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-error"
-              : "sr-only"
+              : status === "processing" || status === "pending"
+                ? "rounded-md border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-navy-900"
+                : "sr-only"
         }
       >
         {statusMessage}

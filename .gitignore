@@ -21,6 +21,7 @@ node_modules/
 # production
 /build
 /dist
+.aws-sam/
 
 # misc
 .DS_Store

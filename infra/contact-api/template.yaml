@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  OccasionFun.co.uk contact API. API Gateway, Lambda, DynamoDB and an existing
+  cPanel SMTP secret in eu-west-2. No SES. DynamoDB TTL deletion is asynchronous
+  and can take up to a few days after expiresAt. The sending lock does not make
+  SMTP exactly-once: if the server accepts a message and the function stops
+  before marking the row sent, a later recovery can send it again.
+
+Rules:
+  LondonOnly:
+    Assertions:
+      - Assert: !Equals [!Ref "AWS::Region", "eu-west-2"]
+        AssertDescription: Deploy this stack only in eu-west-2 (London).
+
+Parameters:
+  SmtpSecretArn:
+    Type: String
+    Description: >
+      ARN of the existing secret occasionfun-co-uk/contact/smtp. JSON keys are
+      hostname, port, username and password. This stack does not create or
+      update that secret.
+    AllowedPattern: "^arn:aws:secretsmanager:eu-west-2:[0-9]{12}:secret:occasionfun-co-uk/contact/smtp-.+$"
+  AllowedOrigins:
+    Type: CommaDelimitedList
+    Default: "https://occasionfun.co.uk,https://www.occasionfun.co.uk,https://d2oib89bmco9su.amplifyapp.com"
+    Description: >
+      Browser origins allowed to call POST /contact. Pass the real Amplify
+      demo https origin in this list before the demo deployment. Do not invent
+      a hostname and do not use a wildcard.
+
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    Architectures:
+      - arm64
+    Timeout: 30
+    MemorySize: 256
+
+Resources:
+  LeadsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: occasionfun-co-uk-leads
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: idempotencyKey
+          AttributeType: S
+        - AttributeName: notificationStatus
+          AttributeType: S
+        - AttributeName: notificationDueAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: idempotencyKey
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: notification-due
+          KeySchema:
+            - AttributeName: notificationStatus
+              KeyType: HASH
+            - AttributeName: notificationDueAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  ContactLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/occasionfun-co-uk-contact
+      RetentionInDays: 30
+
+  ContactRetryLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/occasionfun-co-uk-contact-retry
+      RetentionInDays: 30
+
+  ContactFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: ContactLogGroup
+    Properties:
+      FunctionName: occasionfun-co-uk-contact
+      Handler: handler.handler
+      CodeUri: dist/
+      Description: Validates and stores OccasionFun.co.uk enquiries, then claims one SMTP send.
+      Environment:
+        Variables:
+          LEADS_TABLE_NAME: !Ref LeadsTable
+          SMTP_SECRET_ARN: !Ref SmtpSecretArn
+          SMTP_FROM: enquiries@occasionfun.co.uk
+          SMTP_TO: dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk
+          LEAD_RETENTION_DAYS: "365"
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt LeadsTable.Arn
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref SmtpSecretArn
+      Events:
+        PostContact:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ContactHttpApi
+            Path: /contact
+            Method: POST
+
+  ContactRetryFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: ContactRetryLogGroup
+    Properties:
+      FunctionName: occasionfun-co-uk-contact-retry
+      Handler: handler.retryHandler
+      CodeUri: dist/
+      Timeout: 60
+      Description: Claims due or abandoned OccasionFun.co.uk notification locks and sends pending mail.
+      Environment:
+        Variables:
+          LEADS_TABLE_NAME: !Ref LeadsTable
+          SMTP_SECRET_ARN: !Ref SmtpSecretArn
+          SMTP_FROM: enquiries@occasionfun.co.uk
+          SMTP_TO: dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk
+          LEAD_RETENTION_DAYS: "365"
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+              Resource:
+                - !GetAtt LeadsTable.Arn
+                - !Sub "${LeadsTable.Arn}/index/notification-due"
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref SmtpSecretArn
+      Events:
+        RetrySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+            Description: Retry pending OccasionFun.co.uk contact notifications.
+
+  ContactHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      CorsConfiguration:
+        AllowOrigins: !Ref AllowedOrigins
+        AllowHeaders:
+          - content-type
+        AllowMethods:
+          - POST
+          - OPTIONS
+        MaxAge: 600
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
+        DetailedMetricsEnabled: true
+
+Outputs:
+  ContactEndpoint:
+    Description: Set as NEXT_PUBLIC_CONTACT_ENDPOINT, then rebuild the static site.
+    Value: !Sub https://${ContactHttpApi}.execute-api.${AWS::Region}.amazonaws.com/contact
+  LeadsTableName:
+    Value: !Ref LeadsTable
+  SmtpSecretArn:
+    Value: !Ref SmtpSecretArn
