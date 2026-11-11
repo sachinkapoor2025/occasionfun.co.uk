@@ -60,11 +60,33 @@ export function inspectJobs(jobs) {
     if (!job?.jobId || !KNOWN_STATUSES.has(job.status)) {
       return { ok: false, reason: "Amplify job status is unavailable." };
     }
-    if (!isExactCommit(job.commitId, job.commitId)) {
+    if (job.commitId != null && typeof job.commitId !== "string") {
       return { ok: false, reason: "Amplify job commit information is unavailable." };
     }
   }
   return { ok: true };
+}
+
+function hasFullCommit(job) {
+  return isExactCommit(job?.commitId, job?.commitId);
+}
+
+function blockingRuns(jobs, sha) {
+  return jobs.filter(
+    (job) => NON_TERMINAL_STATUSES.has(job.status) && !isExactCommit(job.commitId, sha),
+  );
+}
+
+function waitForBlocking(jobs, sha) {
+  const blocking = blockingRuns(jobs, sha);
+  if (blocking.length === 0) return null;
+  const identified = blocking.find((job) => hasFullCommit(job));
+  const chosen = identified ?? blocking[0];
+  return {
+    action: "wait",
+    jobId: chosen.jobId,
+    reason: identified ? "older-build-still-running" : "unattributed-build-still-running",
+  };
 }
 
 export function readJobPage(page, previousToken = "") {
@@ -91,9 +113,13 @@ export function selectExistingJob(jobs, sha) {
     return { action: "fail", reason: "GitHub SHA must be a full 40-character commit id." };
   }
   const usable = jobs.filter(
-    (job) => job.commitId === sha && job.status !== "FAILED" && job.status !== "CANCELLED",
+    (job) => isExactCommit(job.commitId, sha) && job.status !== "FAILED" && job.status !== "CANCELLED",
   );
-  if (usable.length === 0) return { action: "start", reason: "no-job-for-commit" };
+  if (usable.length === 0) {
+    const blocking = waitForBlocking(jobs, sha);
+    if (blocking) return blocking;
+    return { action: "start", reason: "no-job-for-commit" };
+  }
   const running = usable.filter((job) => NON_TERMINAL_STATUSES.has(job.status));
   const succeeded = usable.filter((job) => job.status === "SUCCEED");
   const pool = running.length > 0 ? running : succeeded;
@@ -118,24 +144,28 @@ export function deploymentIsFinal(jobs, sha) {
   if (jobs.some((job) => job.status === "SUCCEED" && !job.endTime)) {
     return { ok: false, reason: "Amplify job completion time is unavailable." };
   }
-  const otherActive = jobs.filter(
-    (job) => job.commitId !== sha && NON_TERMINAL_STATUSES.has(job.status),
-  );
+  const otherActive = blockingRuns(jobs, sha);
   if (otherActive.length > 0) {
-    return { ok: false, reason: "another-commit-is-still-running" };
+    const identified = otherActive.some((job) => hasFullCommit(job));
+    return {
+      ok: false,
+      reason: identified ? "another-commit-is-still-running" : "unattributed-build-still-running",
+    };
   }
   const ownActive = jobs.filter(
-    (job) => job.commitId === sha && NON_TERMINAL_STATUSES.has(job.status),
+    (job) => isExactCommit(job.commitId, sha) && NON_TERMINAL_STATUSES.has(job.status),
   );
   if (ownActive.length > 0) return { ok: false, reason: "commit-is-still-running" };
   const succeeded = jobs
     .filter((job) => job.status === "SUCCEED")
     .sort((left, right) => String(right.endTime).localeCompare(String(left.endTime)));
   const latest = succeeded[0];
-  if (!latest || latest.commitId !== sha) {
+  if (!latest || !isExactCommit(latest.commitId, sha)) {
     return {
       ok: false,
-      reason: "latest-successful-job-is-a-different-commit",
+      reason: hasFullCommit(latest)
+        ? "latest-successful-job-is-a-different-commit"
+        : "latest-successful-job-commit-is-unavailable",
       latestCommit: latest?.commitId ?? "",
     };
   }
@@ -154,12 +184,8 @@ export function planAutoBuildChange(branch, jobs, sha) {
   if (typeof branch.enableAutoBuild !== "boolean") {
     return { action: "fail", reason: "Amplify enableAutoBuild is unavailable." };
   }
-  const older = jobs.filter(
-    (job) => job.commitId !== sha && NON_TERMINAL_STATUSES.has(job.status),
-  );
-  if (older.length > 0) {
-    return { action: "wait", reason: "older-build-still-running", jobId: older[0].jobId };
-  }
+  const blocking = waitForBlocking(jobs, sha);
+  if (blocking) return blocking;
   if (branch.enableAutoBuild === false) return { action: "already-disabled" };
   return { action: "disable" };
 }
@@ -180,19 +206,17 @@ export function planRelease(jobs, sha) {
   if (!isExactCommit(sha, sha)) {
     return { action: "fail", reason: "GitHub SHA must be a full 40-character commit id." };
   }
-  const older = jobs.filter(
-    (job) => job.commitId !== sha && NON_TERMINAL_STATUSES.has(job.status),
-  );
-  if (older.length > 0) {
-    return { action: "wait", reason: "older-build-still-running", jobId: older[0].jobId };
-  }
+  const blocking = waitForBlocking(jobs, sha);
+  if (blocking) return blocking;
   const ownActive = jobs.filter(
-    (job) => job.commitId === sha && NON_TERMINAL_STATUSES.has(job.status),
+    (job) => isExactCommit(job.commitId, sha) && NON_TERMINAL_STATUSES.has(job.status),
   );
   if (ownActive.length > 0) {
     return { action: "wait", reason: "existing-build", jobId: ownActive[0].jobId };
   }
-  const ownSuccess = jobs.some((job) => job.commitId === sha && job.status === "SUCCEED");
+  const ownSuccess = jobs.some(
+    (job) => isExactCommit(job.commitId, sha) && job.status === "SUCCEED",
+  );
   if (ownSuccess) {
     const final = deploymentIsFinal(jobs, sha);
     if (!final.ok) {

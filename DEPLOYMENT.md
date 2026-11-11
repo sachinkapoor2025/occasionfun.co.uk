@@ -35,7 +35,7 @@ The static export in CI uses `NEXT_PUBLIC_SITE_URL=https://occasionfun.co.uk`. T
 
 Sequence:
 
-1. Check Amplify app `d2oib89bmco9su`, branch `demo`, before CI or either deployment. If `enableAutoBuild` is already false, leave it unchanged. If it is true, list the visible jobs, wait until jobs for other commits finish, disable auto-build for that demo branch only, and read it back with `get-branch`. A failed verification stops the workflow before the backend and frontend run.
+1. Check Amplify app `d2oib89bmco9su`, branch `demo`, before CI or either deployment. If `enableAutoBuild` is already false, leave it unchanged. If it is true, list the visible jobs, wait until a running job belongs to another commit or has no full commit id, disable auto-build for that demo branch only, and read it back with `get-branch`. A job with a missing or short commit id is never treated as this commit. A failed verification stops the workflow before the backend and frontend run.
 2. Wait until the CI workflow has succeeded for the same commit.
 3. Check out that commit.
 4. Require `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.

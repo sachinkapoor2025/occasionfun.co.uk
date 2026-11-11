@@ -13,8 +13,10 @@ import {
   deploymentIsFinal,
   inspectJobs,
   isExactCommit,
+  normalizeJob,
   planAutoBuildChange,
   planRelease,
+  readJobPage,
   selectExistingJob,
   verifyAutoBuildDisabled,
 } from "../scripts/amplify-demo-release.mjs";
@@ -538,8 +540,9 @@ describe("Amplify commit matching", () => {
         sha,
       ),
     ).toMatchObject({
-      action: "fail",
-      reason: "Amplify job commit information is unavailable.",
+      action: "wait",
+      jobId: "prefix",
+      reason: "unattributed-build-still-running",
     });
     expect(
       selectExistingJob(
@@ -609,6 +612,80 @@ describe("Amplify single publisher", () => {
     ).toBe("Amplify enableAutoBuild is unavailable.");
     expect(verifyAutoBuildDisabled({ branchName: "demo", enableAutoBuild: true }).ok).toBe(false);
     expect(verifyAutoBuildDisabled({ branchName: "main", enableAutoBuild: false }).ok).toBe(false);
+  });
+
+  it("accepts a job list that omits commit ids and never treats those jobs as this commit", () => {
+    const omitted = normalizeJob({ jobId: "manual", status: "SUCCEED", endTime: "2020-01-01T00:00:00Z" });
+    expect(omitted.commitId).toBe("");
+    expect(inspectJobs([omitted]).ok).toBe(true);
+    expect(
+      readJobPage({
+        jobSummaries: [{ jobId: "manual", status: "SUCCEED", endTime: "2020-01-01T00:00:00Z" }],
+      }).ok,
+    ).toBe(true);
+    expect(inspectJobs([]).ok).toBe(true);
+    expect(
+      planAutoBuildChange({ branchName: "demo", enableAutoBuild: true }, [], sha).action,
+    ).toBe("disable");
+    expect(
+      planAutoBuildChange({ branchName: "demo", enableAutoBuild: false }, [omitted], sha).action,
+    ).toBe("already-disabled");
+    expect(
+      planAutoBuildChange({ branchName: "demo", enableAutoBuild: true }, [omitted], sha).action,
+    ).toBe("disable");
+    expect(
+      planAutoBuildChange(
+        { branchName: "demo", enableAutoBuild: true },
+        [{ jobId: "manual", commitId: "", status: "RUNNING", endTime: "" }],
+        sha,
+      ),
+    ).toMatchObject({ action: "wait", reason: "unattributed-build-still-running" });
+    expect(
+      planAutoBuildChange(
+        { branchName: "demo", enableAutoBuild: true },
+        [{ jobId: "prefix", commitId: sha.slice(0, 12), status: "RUNNING", endTime: "" }],
+        sha,
+      ).action,
+    ).toBe("wait");
+    expect(
+      selectExistingJob(
+        [{ jobId: "manual", commitId: "", status: "SUCCEED", endTime: "2020-01-03T00:00:00Z" }],
+        sha,
+      ),
+    ).toMatchObject({ action: "start" });
+    expect(
+      deploymentIsFinal(
+        [
+          { jobId: "ours", commitId: sha, status: "SUCCEED", endTime: "2020-01-02T00:00:00Z" },
+          { jobId: "manual", commitId: "", status: "SUCCEED", endTime: "2020-01-01T00:00:00Z" },
+        ],
+        sha,
+      ).ok,
+    ).toBe(true);
+    expect(
+      deploymentIsFinal(
+        [
+          { jobId: "ours", commitId: sha, status: "SUCCEED", endTime: "2020-01-01T00:00:00Z" },
+          { jobId: "manual", commitId: "", status: "SUCCEED", endTime: "2020-01-02T00:00:00Z" },
+        ],
+        sha,
+      ).reason,
+    ).toBe("latest-successful-job-commit-is-unavailable");
+    expect(
+      planRelease(
+        [{ jobId: "manual", commitId: "", status: "SUCCEED", endTime: "2020-01-02T00:00:00Z" }],
+        sha,
+      ),
+    ).toMatchObject({ action: "start" });
+    expect(
+      planRelease(
+        [{ jobId: "manual", commitId: "", status: "RUNNING", endTime: "" }],
+        sha,
+      ),
+    ).toMatchObject({ action: "wait", reason: "unattributed-build-still-running" });
+    expect(inspectJobs([{ jobId: "bad", commitId: 12, status: "SUCCEED" }]).reason).toBe(
+      "Amplify job commit information is unavailable.",
+    );
   });
 
   it("waits while an Amplify job from another commit is still running", () => {
