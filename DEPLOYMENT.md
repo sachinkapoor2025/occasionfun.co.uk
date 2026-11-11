@@ -10,7 +10,7 @@ Nothing in this change has been deployed. The workflows below are ready for revi
 
 | Workflow | File | What it does now |
 | --- | --- | --- |
-| CI/CD | `.github/workflows/ci-cd.yml` | Validates every pull request and push. A successful validation of a `demo` push deploys that commit and then runs smoke tests. A `main` push can deploy production only after separate approval and credentials. |
+| CI/CD | `.github/workflows/ci-cd.yml` | Validates every pull request and push. A successful validation of a `demo` push deploys that commit and then runs smoke tests. A `main` push can deploy production only after required reviewer approval. Both jobs use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` and keep separate targets, templates, stacks, and CloudFormation roles. |
 
 Azure Pipelines remains CI-only. Its triggers are disabled and it does not deploy.
 
@@ -72,18 +72,20 @@ A webhook Amplify accepted before `get-branch` showed `enableAutoBuild: false` c
 
 ## Production deployment
 
-A pull request into `main` runs `validate` only. After that pull request is merged, the push to `main` runs `validate` again. `deploy-production` stays skipped until `PRODUCTION_DEPLOYMENTS_ENABLED` is `true`. It never reads `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY`.
+A pull request into `main` runs `validate` only. After that pull request is merged, the push to `main` runs `validate` again. `deploy-production` stays skipped until `PRODUCTION_DEPLOYMENTS_ENABLED` is `true`. When it runs, it authenticates with the existing repository secrets `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, the same secrets `deploy-demo` uses.
 
 Backend deployment starts only when all of these are true:
 
 1. The commit was pushed to `main` and `validate` succeeded.
 2. Repository variable `PRODUCTION_DEPLOYMENTS_ENABLED` is `true`.
 3. The job is attached to the GitHub Environment named `production`, and that environment has a required-reviewer protection rule. The workflow reads the environment and stops if the rule is missing.
-4. Repository secrets `AWS_PRODUCTION_ACCESS_KEY_ID` and `AWS_PRODUCTION_SECRET_ACCESS_KEY` are set. These are separate from the demo deploy user.
+4. `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set. Production has no separate credential check.
 
 Those steps are not a substitute for configuring the environment. Create the environment and its reviewers before setting the variable. A missing environment does not approve a deployment: the reviewer check fails before AWS credentials are configured.
 
-The production stack is `occasionfun-co-uk-prod-contact`. Production does not use `occasionfun-cloudformation-demo`. Its parameters are `Environment=prod`, the same SMTP secret ARN, and only:
+Demo and production use those credentials and retain separate deployment targets, templates, stacks, and CloudFormation execution-role configuration. Demo builds `template.demo.yaml`, deploys stack `occasionfun-co-uk-contact`, and passes execution role `arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. Production builds `template.production.yaml`, deploys stack `occasionfun-co-uk-prod-contact`, and passes no CloudFormation execution role. A production run that supplies the demo role stops before AWS is called.
+
+The production stack is `occasionfun-co-uk-prod-contact`. Its parameters are `Environment=prod`, the same SMTP secret ARN, and only:
 
 - `https://occasionfun.co.uk`
 - `https://www.occasionfun.co.uk`
@@ -113,10 +115,8 @@ Repository secrets, already expected:
 
 | Secret | Use |
 | --- | --- |
-| `AWS_ACCESS_KEY_ID` | Demo IAM user `occasionfun-github-deploy`. Used only by `deploy-demo`. |
-| `AWS_SECRET_ACCESS_KEY` | Matching demo secret key. |
-| `AWS_PRODUCTION_ACCESS_KEY_ID` | Separate production key. Not configured, so production deployment stays blocked. |
-| `AWS_PRODUCTION_SECRET_ACCESS_KEY` | Matching production secret key. |
+| `AWS_ACCESS_KEY_ID` | Existing key for IAM user `occasionfun-github-deploy`. Used by `deploy-demo` and `deploy-production`. |
+| `AWS_SECRET_ACCESS_KEY` | Matching secret key. Used by both jobs. |
 
 The workflows do not print those values. Do not create an OIDC role for this path.
 
@@ -138,8 +138,10 @@ Region for every AWS step: `eu-west-2`.
 
 | | Demo | Production |
 | --- | --- | --- |
+| AWS credentials | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | The same secrets |
+| Template | `template.demo.yaml` | `template.production.yaml` |
 | Stack | `occasionfun-co-uk-contact` | `occasionfun-co-uk-prod-contact` |
-| CloudFormation role | `occasionfun-cloudformation-demo` | Not this role |
+| CloudFormation role | `occasionfun-cloudformation-demo` | No execution role is passed |
 | API | `0e6zpkvbkj` | A new API created by the production stack |
 | Contact Lambda | `occasionfun-co-uk-contact` | `occasionfun-co-uk-prod-contact` |
 | Retry Lambda | `occasionfun-co-uk-contact-retry` | `occasionfun-co-uk-prod-contact-retry` |
@@ -170,7 +172,7 @@ The safety rules themselves are covered by `npm test` without calling AWS.
 4. An account or region mismatch fails before the change set is created.
 5. A demo endpoint other than `https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact` fails the job after the stack operation.
 6. Amplify failures leave the API update in place and fail the workflow. If the log says auto-build is disabled and no release was started, re-run after the older build finishes. If another commit is the latest deployment, the release was not accepted. The Amplify console for app `d2oib89bmco9su`, branch `demo`, shows the build log. These workflow logs do not download Amplify log streams.
-7. A `main` push with production still blocked skips `deploy-production` and does not call AWS. A production run that stops on the reviewer check or on missing production credentials has not used the demo access keys.
+7. A `main` push with production still blocked skips `deploy-production` and does not call AWS. A production run that stops on the reviewer check has not configured AWS credentials. After that check, production uses `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 
 ## Local build
 

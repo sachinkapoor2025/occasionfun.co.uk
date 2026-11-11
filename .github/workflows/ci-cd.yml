@@ -283,27 +283,35 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! body="$(gh api "repos/${GITHUB_REPOSITORY}/environments/production")"; then
-            echo "Could not verify the production GitHub Environment. Deployment stopped."
+          if response="$(gh api --include "repos/${GITHUB_REPOSITORY}/environments/production" 2>&1)"; then
+            gh_status=0
+          else
+            gh_status=$?
+          fi
+          printf '%s\n' "$response"
+          http="$(printf '%s\n' "$response" | awk '/^HTTP\//{ code=$2 } END { print code }')"
+          echo "GitHub environment API HTTP ${http:-none}; gh exit ${gh_status}."
+          if [ "$gh_status" -ne 0 ] || [ "$http" != "200" ]; then
+            if [ "$http" = "401" ] || [ "$http" = "403" ]; then
+              echo "GitHub refused to read the production environment: HTTP ${http}."
+              echo "This job uses the built-in token with contents and actions read. It cannot create the environment."
+            elif [ "$http" = "404" ]; then
+              echo "The production environment does not exist."
+              echo "Create Settings → Environments → production and add a required reviewer before deploying."
+            else
+              echo "Could not verify the production GitHub Environment. Deployment stopped."
+            fi
             exit 1
           fi
+          body="$(printf '%s\n' "$response" | awk 'BEGIN { body=0 } body { print } /^[\r]*$/ { body=1 }')"
           reviewers="$(printf '%s' "$body" | jq '[.protection_rules[]? | select(.type=="required_reviewers")] | length')"
+          echo "Required reviewer rules: ${reviewers}."
           if [ "$reviewers" -lt 1 ]; then
-            echo "The production environment must require reviewer approval before deployment."
+            echo "The production environment exists, but it has no required reviewer rule."
+            echo "Open Settings → Environments → production → Deployment protection rules, enable Required reviewers, and choose at least one reviewer."
             exit 1
           fi
           echo "Production environment requires reviewer approval."
-
-      - name: Require production AWS credentials
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_PRODUCTION_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_PRODUCTION_SECRET_ACCESS_KEY }}
-        run: |
-          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-            echo "Production requires AWS_PRODUCTION_ACCESS_KEY_ID and AWS_PRODUCTION_SECRET_ACCESS_KEY."
-            echo "Demo deployment credentials are not used."
-            exit 1
-          fi
 
       - name: Mask the SMTP secret identifier
         run: echo "::add-mask::arn:aws:secretsmanager:eu-west-2:796174527529:secret:occasionfun-co-uk/contact/smtp-32Px2G"
@@ -311,8 +319,8 @@ jobs:
       - name: Configure production AWS credentials
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
-          aws-access-key-id: ${{ secrets.AWS_PRODUCTION_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_PRODUCTION_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
       - name: Require the OccasionFun account

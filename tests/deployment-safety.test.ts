@@ -490,7 +490,7 @@ describe("GitHub Actions workflows", () => {
     expect(smoke).toContain("if: success()");
   });
 
-  it("cannot deploy production without the environment gate or with demo credentials", () => {
+  it("cannot deploy production without the environment gate", () => {
     expect(pipeline).toContain("branches: [demo, main, master]");
     expect(production).toContain("needs: validate");
     expect(production).toContain("github.event_name == 'push' && github.ref == 'refs/heads/main'");
@@ -502,11 +502,17 @@ describe("GitHub Actions workflows", () => {
     expect(production.indexOf("environment: production")).toBeLessThan(
       production.indexOf("required_reviewers"),
     );
+    expect(production).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(production).toContain("actions: read");
     expect(production).toContain("required_reviewers");
-    expect(production).toContain("secrets.AWS_PRODUCTION_ACCESS_KEY_ID");
-    expect(production).toContain("secrets.AWS_PRODUCTION_SECRET_ACCESS_KEY");
-    expect(production).not.toContain("secrets.AWS_ACCESS_KEY_ID");
-    expect(production).not.toContain("secrets.AWS_SECRET_ACCESS_KEY");
+    expect(production).toContain("GitHub refused to read the production environment");
+    expect(production).toContain("The production environment does not exist.");
+    expect(production).toContain("The production environment exists, but it has no required reviewer rule.");
+    expect(production).toContain("aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}");
+    expect(production).toContain("aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}");
+    expect(production).not.toContain("AWS_PRODUCTION_ACCESS_KEY_ID");
+    expect(production).not.toContain("AWS_PRODUCTION_SECRET_ACCESS_KEY");
+    expect(production).not.toContain("Require production AWS credentials");
     expect(production).toContain("name: contact-production-template");
     expect(production).toContain("sam build --template template.production.yaml");
     expect(production).not.toContain("sam build --template template.yaml");
@@ -1099,7 +1105,9 @@ describe("CloudFormation execution role", () => {
       productionJob.indexOf("  smoke-test:"),
     );
     expect(productionSlice).not.toContain("occasionfun-cloudformation-demo");
-    expect(productionSlice).not.toContain("secrets.AWS_ACCESS_KEY_ID");
+    expect(productionSlice).not.toContain("--role-arn");
+    expect(productionSlice).toContain("secrets.AWS_ACCESS_KEY_ID");
+    expect(productionSlice).toContain("secrets.AWS_SECRET_ACCESS_KEY");
     expect(productionSlice).toContain("--stack-name occasionfun-co-uk-prod-contact");
     expect(samDeploy).not.toContain("--role-arn \"$ROLE_ARN\"");
     const result = runConfigCheck("prod", ["--role-arn", DEMO_CLOUDFORMATION_ROLE_ARN]);
