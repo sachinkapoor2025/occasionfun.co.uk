@@ -8,6 +8,7 @@ export const metadata = createPageMetadata({
   description:
     "Draft cookie notice for OCCASIONFUN LTD. Essential cookies are distinguished from optional analytics cookies, which are not loaded before consent.",
   path: "/cookies",
+  indexable: false,
 });
 
 export default function CookiesPage() {

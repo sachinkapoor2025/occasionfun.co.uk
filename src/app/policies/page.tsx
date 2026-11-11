@@ -11,6 +11,7 @@ export const metadata = createPageMetadata({
   description:
     "Document library for OCCASIONFUN LTD policies and supplier documents. Only approved materials are published; others are available on request or pending.",
   path: "/policies",
+  indexable: false,
 });
 
 export default function PoliciesPage() {

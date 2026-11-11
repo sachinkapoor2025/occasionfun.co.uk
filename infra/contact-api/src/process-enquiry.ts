@@ -183,8 +183,11 @@ export function expiresAtEpoch(created: Date): number {
   return Math.floor(created.getTime() / 1000) + retentionSeconds();
 }
 
-export function enquirySubject(enquiryType: string): string {
-  return `${company.legalName} enquiry: ${enquiryType.replace(/[\r\n]/g, " ")}`;
+export function enquirySubject(enquiryType: string, prefix?: string): string {
+  const subject = `${company.legalName} enquiry: ${enquiryType.replace(/[\r\n]/g, " ")}`;
+  const trimmed = (prefix ?? "").replace(/[\r\n]/g, "").trim();
+  if (!trimmed) return subject;
+  return `${trimmed} ${subject}`;
 }
 
 export function enquiryText(lead: LeadRecord): string {

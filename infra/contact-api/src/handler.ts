@@ -271,7 +271,10 @@ async function sendMail(lead: LeadRecord): Promise<void> {
     from: smtpFrom,
     to: smtpTo,
     replyTo: lead.email,
-    subject: enquirySubject(lead.enquiryType),
+    subject: enquirySubject(
+      lead.enquiryType,
+      process.env.NOTIFICATION_SUBJECT_PREFIX,
+    ),
     text: enquiryText(lead),
   });
 }

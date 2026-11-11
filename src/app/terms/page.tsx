@@ -9,6 +9,7 @@ export const metadata = createPageMetadata({
   description:
     "Draft website terms for OCCASIONFUN LTD. Governing-law and liability clauses require legal review before launch reliance.",
   path: "/terms",
+  indexable: false,
 });
 
 export default function TermsPage() {

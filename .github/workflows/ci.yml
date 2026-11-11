@@ -1,6 +1,5 @@
-# GitHub Actions — CI only.
-# Amplify Hosting is the planned deployment platform. This workflow must not
-# deploy to S3. Dependencies are installed in the pipeline (never commit node_modules).
+# Validation only. Deployment lives in deploy-demo.yml and deploy-production.yml.
+# Dependencies are installed in the pipeline (never commit node_modules).
 name: CI
 
 "on":
@@ -20,17 +19,17 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       NEXT_PUBLIC_SITE_URL: https://occasionfun.co.uk
       FAIL_ON_PLACEHOLDERS: "false"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Use Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm
@@ -62,11 +61,27 @@ jobs:
       - name: Test contact API
         run: npm test --prefix infra/contact-api
 
+      - name: Install SAM CLI
+        uses: aws-actions/setup-sam@f84ec7d548307efafe33230528756de3c5841a17 # v2
+        with:
+          use-installer: true
+
+      - name: Build contact API bundle
+        run: npm run build --prefix infra/contact-api
+
+      - name: SAM build
+        working-directory: infra/contact-api
+        run: sam build --template template.yaml
+
+      - name: SAM validate
+        working-directory: infra/contact-api
+        run: sam validate --lint --template template.yaml
+
       - name: Production static export
         run: npm run build
 
       - name: Upload static site artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: site-out
           path: out

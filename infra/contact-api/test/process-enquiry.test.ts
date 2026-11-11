@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { company } from "../../../src/config/company";
 import {
   LOCK_TIMEOUT_MS,
   RETENTION_SECONDS,
   SMTP_ATTEMPTS,
+  enquirySubject,
   expiresAtEpoch,
   idempotencyKey,
   processEnquiry,
@@ -559,5 +561,29 @@ describe("retryDueNotifications", () => {
 
     expect(harness.get(key)?.notificationStatus).toBe("sending");
     expect(harness.get(key)?.sendingOwner).toBe("owner-a");
+  });
+});
+
+describe("notification subject prefix", () => {
+  const enquiryType = "Software development";
+  const base = `${company.legalName} enquiry: ${enquiryType}`;
+
+  it("prefixes demo notifications and leaves the enquiry text unchanged", () => {
+    expect(enquirySubject(enquiryType, "[DEMO]")).toBe(`[DEMO] ${base}`);
+  });
+
+  it("prefixes production notifications and leaves the enquiry text unchanged", () => {
+    expect(enquirySubject(enquiryType, "[PROD]")).toBe(`[PROD] ${base}`);
+  });
+
+  it("keeps the existing subject when a deployment has no prefix", () => {
+    expect(enquirySubject(enquiryType)).toBe(base);
+    expect(enquirySubject(enquiryType, "  ")).toBe(base);
+  });
+
+  it("removes line breaks from the prefix and the enquiry type", () => {
+    expect(enquirySubject("Hello\r\nthere", "[DEMO]\n")).toBe(
+      `[DEMO] ${company.legalName} enquiry: Hello  there`,
+    );
   });
 });

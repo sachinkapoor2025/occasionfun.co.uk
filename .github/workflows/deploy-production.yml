@@ -1,0 +1,167 @@
+# Production deployment is prepared and blocked.
+# Push and workflow_dispatch both use the same jobs. Manual dispatch cannot skip
+# environment: production or PRODUCTION_DEPLOYMENTS_ENABLED.
+# AWS credentials are configured only after the reviewer check inside that job.
+# The frontend Amplify release stays disabled until that branch and API are ready.
+name: Deploy production
+
+"on":
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: deploy-production-occasionfun-co-uk-prod-contact
+  cancel-in-progress: false
+
+jobs:
+  authorization:
+    name: production authorization
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Report whether production deployment is authorized
+        run: |
+          if [ "${{ vars.PRODUCTION_DEPLOYMENTS_ENABLED }}" = "true" ]; then
+            echo "Production backend deployment is authorized to request approval."
+            echo "The deploy job uses the production GitHub Environment."
+          else
+            echo "Production deployment is not authorized."
+            echo "No AWS deployment step will run."
+            echo "Create the production environment with required reviewers, then set PRODUCTION_DEPLOYMENTS_ENABLED to true."
+          fi
+          echo "Production Amplify deployment remains disabled."
+
+  wait-for-ci:
+    name: wait for CI
+    needs: authorization
+    if: success() && vars.PRODUCTION_DEPLOYMENTS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Wait until CI succeeds for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/wait-for-ci.sh
+
+  deploy-backend:
+    name: deploy production contact API
+    needs: wait-for-ci
+    if: success() && vars.PRODUCTION_DEPLOYMENTS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    env:
+      AWS_REGION: eu-west-2
+      AWS_DEFAULT_REGION: eu-west-2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Require production reviewer protection
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! body="$(gh api "repos/${GITHUB_REPOSITORY}/environments/production")"; then
+            echo "Could not verify the production GitHub Environment. Deployment stopped."
+            exit 1
+          fi
+          reviewers="$(printf '%s' "$body" | jq '[.protection_rules[]? | select(.type=="required_reviewers")] | length')"
+          if [ "$reviewers" -lt 1 ]; then
+            echo "The production environment must require reviewer approval before deployment."
+            exit 1
+          fi
+          echo "Production environment requires reviewer approval."
+
+      - name: Require AWS credentials
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "GitHub repository secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set."
+            exit 1
+          fi
+
+      - name: Mask the SMTP secret identifier
+        run: echo "::add-mask::arn:aws:secretsmanager:eu-west-2:796174527529:secret:occasionfun-co-uk/contact/smtp-32Px2G"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+
+      - name: Install SAM CLI
+        uses: aws-actions/setup-sam@f84ec7d548307efafe33230528756de3c5841a17 # v2
+        with:
+          use-installer: true
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            infra/contact-api/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install contact API dependencies
+        run: npm ci --prefix infra/contact-api
+
+      - name: Build contact API bundle
+        run: npm run build --prefix infra/contact-api
+
+      - name: SAM build
+        working-directory: infra/contact-api
+        run: sam build --template template.yaml
+
+      - name: Write production parameters
+        run: |
+          cat > "$RUNNER_TEMP/contact-parameters.yaml" <<'EOF'
+          Environment: prod
+          SmtpSecretArn: arn:aws:secretsmanager:eu-west-2:796174527529:secret:occasionfun-co-uk/contact/smtp-32Px2G
+          AllowedOrigins: "https://occasionfun.co.uk,https://www.occasionfun.co.uk"
+          EOF
+
+      - name: Create or update the production stack
+        run: |
+          bash scripts/deploy-contact-stack.sh \
+            --environment prod \
+            --stack-name occasionfun-co-uk-prod-contact \
+            --parameters-file "$RUNNER_TEMP/contact-parameters.yaml" \
+            --allow-create true \
+            --expected-table occasionfun-co-uk-prod-leads \
+            --expected-contact-function occasionfun-co-uk-prod-contact \
+            --expected-retry-function occasionfun-co-uk-prod-contact-retry \
+            --expected-contact-log-group /aws/lambda/occasionfun-co-uk-prod-contact \
+            --expected-retry-log-group /aws/lambda/occasionfun-co-uk-prod-contact-retry
+
+  production-frontend:
+    name: production Amplify deployment disabled
+    needs: deploy-backend
+    if: success() && vars.PRODUCTION_DEPLOYMENTS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Leave production hosting unchanged
+        run: |
+          echo "Production Amplify deployment is disabled."
+          echo "This job does not call Amplify, publish the site, or change DNS."
+          echo "Remaining setup is documented in DEPLOYMENT.md."
+          echo "::notice::Production frontend deployment is disabled."

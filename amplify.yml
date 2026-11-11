@@ -7,17 +7,14 @@ frontend:
         - npm ci --prefix infra/contact-api
     build:
       commands:
-        # Next.js inlines NEXT_PUBLIC_* at build time. Amplify console variables
-        # are copied into .env.production so the static export can see them.
-        # The demo branch uses the deployed contact API when the console
-        # variable is not already set. Production builds do not receive it here.
-        - |
-          if [ "$AWS_BRANCH" = "demo" ] && [ -z "${NEXT_PUBLIC_CONTACT_ENDPOINT:-}" ]; then
-            export NEXT_PUBLIC_CONTACT_ENDPOINT="https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact"
-          fi
-          touch .env.production
-          env | grep '^NEXT_PUBLIC_' >> .env.production || true
-          npm run build
+        # Next.js inlines NEXT_PUBLIC_* at build time. The script writes
+        # .env.production from the branch rules: only the demo branch may use
+        # the existing demo API. Every other branch refuses that API and does
+        # not receive it as a fallback. The demo deployment workflow disables
+        # auto-build for the demo branch before it starts a RELEASE job.
+        # This file still runs inside that job. It does not change branch settings.
+        - node scripts/amplify-public-env.mjs
+        - set -a && . ./.env.production && set +a && npm run build
   artifacts:
     baseDirectory: out
     files:

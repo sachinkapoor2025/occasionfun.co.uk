@@ -9,6 +9,7 @@ export const metadata = createPageMetadata({
   description:
     "Draft privacy notice for the OCCASIONFUN LTD website. Requires legal review before launch reliance.",
   path: "/privacy",
+  indexable: false,
 });
 
 export default function PrivacyPage() {

@@ -8,10 +8,13 @@ export function createPageMetadata({
   title,
   description = defaultDescription,
   path = "/",
+  indexable = true,
 }: {
   title: string;
   description?: string;
   path?: string;
+  /** Draft legal pages stay public but are omitted from search indexes. */
+  indexable?: boolean;
 }): Metadata {
   const url = new URL(path, company.siteUrl).toString();
   const fullTitle =
@@ -39,8 +42,8 @@ export function createPageMetadata({
       description,
     },
     robots: {
-      index: true,
-      follow: true,
+      index: indexable,
+      follow: indexable,
     },
   };
 }
