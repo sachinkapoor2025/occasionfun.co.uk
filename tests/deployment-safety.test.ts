@@ -392,8 +392,21 @@ describe("GitHub Actions workflows", () => {
     expect(validate).toContain("npm run test");
     expect(validate).toContain("npm run typecheck --prefix infra/contact-api");
     expect(validate).toContain("npm test --prefix infra/contact-api");
-    expect(validate).toContain("sam build --template template.yaml");
+    expect(validate).not.toContain("render-contact-template.mjs--environment");
+    expect(validate).toMatch(
+      /node scripts\/render-contact-template\.mjs\r?\n\s+--environment demo/,
+    );
+    expect(validate).toMatch(
+      /node scripts\/render-contact-template\.mjs\r?\n\s+--environment prod/,
+    );
+    expect(validate).toContain("sam build --template template.demo.yaml");
+    expect(validate).not.toContain("sam build --template template.yaml");
     expect(validate).toContain("sam validate --lint --template template.yaml");
+    expect(validate).toContain("sam validate --lint --template template.demo.yaml");
+    expect(validate).toContain("name: contact-demo-template");
+    expect(validate).toContain("name: contact-production-template");
+    expect(validate).toContain("sam validate --lint --template demo-retry-permission.yaml");
+    expect(validate).not.toContain("change-set-type IMPORT");
     expect(validate).toContain("npm run build");
     expect(validate).toContain("node-version: \"24\"");
     expect(validate).not.toContain("secrets.AWS_ACCESS_KEY_ID");
@@ -494,13 +507,20 @@ describe("GitHub Actions workflows", () => {
     expect(production).toContain("secrets.AWS_PRODUCTION_SECRET_ACCESS_KEY");
     expect(production).not.toContain("secrets.AWS_ACCESS_KEY_ID");
     expect(production).not.toContain("secrets.AWS_SECRET_ACCESS_KEY");
-    expect(production).toContain(
-      "node scripts/render-contact-template.mjs --environment prod --output infra/contact-api/template.production.yaml",
-    );
+    expect(production).toContain("name: contact-production-template");
     expect(production).toContain("sam build --template template.production.yaml");
     expect(production).not.toContain("sam build --template template.yaml");
-    expect(demo).toContain("sam build --template template.yaml");
+    expect(production).not.toContain("render-contact-template.mjs");
+    expect(production).not.toContain("template.demo.yaml");
+    expect(production).not.toContain("contact-demo-template");
+    expect(demo).toContain("name: contact-demo-template");
+    expect(demo).toContain("sam build --template template.demo.yaml");
+    expect(demo).not.toContain("render-contact-template.mjs");
     expect(demo).not.toContain("template.production.yaml");
+    expect(demo).not.toContain("contact-production-template");
+    expect(demo).not.toContain("demo-retry-permission.yaml");
+    expect(demo).not.toContain("change-set-type IMPORT");
+    expect(pipeline).not.toContain("import-existing-retry-permission");
     expect(production).toContain("--stack-name occasionfun-co-uk-prod-contact");
     expect(production).toContain(PRODUCTION.table);
     expect(production).toContain(PRODUCTION.contactFunction);
@@ -528,6 +548,7 @@ describe("GitHub Actions workflows", () => {
       ["actions/checkout", "11d5960a326750d5838078e36cf38b85af677262"],
       ["actions/setup-node", "49933ea5288caeca8642d1e84afbd3f7d6820020"],
       ["actions/upload-artifact", "ea165f8d65b6e75b540449e92b4886f43607fa02"],
+      ["actions/download-artifact", "d3f86a106a0bac45b974a628896c90dbdf5c8093"],
       ["aws-actions/configure-aws-credentials", "7474bc4690e29a8392af63c5b98e7449536d5c3a"],
       ["aws-actions/setup-sam", "f84ec7d548307efafe33230528756de3c5841a17"],
     ]);

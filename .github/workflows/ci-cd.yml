@@ -23,6 +23,9 @@ jobs:
     name: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
     env:
       NEXT_PUBLIC_SITE_URL: https://occasionfun.co.uk
       FAIL_ON_PLACEHOLDERS: "false"
@@ -74,20 +77,53 @@ jobs:
       - name: Build contact API bundle
         run: npm run build --prefix infra/contact-api
 
-      - name: SAM build
-        working-directory: infra/contact-api
-        run: sam build --template template.yaml
-
       - name: SAM validate
         working-directory: infra/contact-api
         run: sam validate --lint --template template.yaml
 
+      - name: Render demo template
+        run: >-
+          node scripts/render-contact-template.mjs
+          --environment demo
+          --output infra/contact-api/template.demo.yaml
+
+      - name: SAM validate rendered demo template
+        working-directory: infra/contact-api
+        run: sam validate --lint --template template.demo.yaml
+
+      - name: SAM build rendered demo template
+        working-directory: infra/contact-api
+        run: sam build --template template.demo.yaml
+
+      - name: SAM validate retained demo permission template
+        working-directory: infra/contact-api
+        run: sam validate --lint --template demo-retry-permission.yaml
+
       - name: Render production physical names
-        run: node scripts/render-contact-template.mjs --environment prod --output infra/contact-api/template.production.yaml
+        run: >-
+          node scripts/render-contact-template.mjs
+          --environment prod
+          --output infra/contact-api/template.production.yaml
 
       - name: SAM validate production names
         working-directory: infra/contact-api
         run: sam validate --lint --template template.production.yaml
+
+      - name: Upload rendered demo template
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: contact-demo-template
+          path: infra/contact-api/template.demo.yaml
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload rendered production template
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: contact-production-template
+          path: infra/contact-api/template.production.yaml
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Production static export
         run: npm run build
@@ -98,6 +134,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/demo'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
     env:
       AWS_REGION: eu-west-2
       AWS_DEFAULT_REGION: eu-west-2
@@ -163,9 +202,25 @@ jobs:
         with:
           use-installer: true
 
+      - name: Download the validated demo template
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: contact-demo-template
+          path: infra/contact-api
+
       - name: SAM build
         working-directory: infra/contact-api
-        run: sam build --template template.yaml
+        run: sam build --template template.demo.yaml
+
+      - name: Confirm the demo package has no retained permission
+        working-directory: infra/contact-api
+        run: |
+          test -f template.demo.yaml
+          test -f .aws-sam/build/template.yaml
+          if grep -q "ContactRetryFunctionRetrySchedulePermission:" .aws-sam/build/template.yaml; then
+            echo "Demo deployment package declares the retained retry permission."
+            exit 1
+          fi
 
       - name: Write demo parameters
         run: |
@@ -211,6 +266,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
     env:
       AWS_REGION: eu-west-2
       AWS_DEFAULT_REGION: eu-west-2
@@ -288,8 +346,11 @@ jobs:
       - name: Build contact API bundle
         run: npm run build --prefix infra/contact-api
 
-      - name: Render production physical names
-        run: node scripts/render-contact-template.mjs --environment prod --output infra/contact-api/template.production.yaml
+      - name: Download the validated production template
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: contact-production-template
+          path: infra/contact-api
 
       - name: SAM build
         working-directory: infra/contact-api

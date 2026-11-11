@@ -16,15 +16,14 @@ const PHYSICAL_NAMES = [
   { property: "FunctionName", key: "retryFunction" },
 ];
 
-const DEPLOYED_RETRY_PERMISSION = {
-  Type: "AWS::Lambda::Permission",
-  Properties: {
-    Action: "lambda:InvokeFunction",
-    FunctionName: { Ref: "ContactRetryFunction" },
-    Principal: "events.amazonaws.com",
-    SourceArn: { "Fn::GetAtt": ["ContactRetryFunctionRetrySchedule", "Arn"] },
-  },
-};
+const PRODUCTION_RETRY_PERMISSION = `  ContactRetryFunctionRetrySchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ContactRetryFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn
+`;
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -40,48 +39,58 @@ function propertyLine(property, name) {
   return new RegExp(`^ +${property}: ${escapeRegExp(name)}$`, "m");
 }
 
-function retryFunctionBlock(template) {
-  const start = template.indexOf("  ContactRetryFunction:");
-  const end = template.indexOf("  ContactHttpApi:");
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error("ContactRetryFunction block was not found.");
-  }
-  return template.slice(start, end);
+function resourceBlock(template, logicalId) {
+  const start = template.indexOf(`  ${logicalId}:`);
+  if (start === -1) throw new Error(`${logicalId} was not found.`);
+  const rest = template.slice(start + 1);
+  const next = rest.search(/\n {2}[A-Za-z]/);
+  if (next === -1) throw new Error(`${logicalId} was not found.`);
+  return template.slice(start, start + 1 + next);
+}
+
+function lineEnding(template) {
+  return template.includes("\r\n") ? "\r\n" : "\n";
 }
 
 /**
- * SAM's Schedule event generates this permission. The document matches the
- * permission already stored on the demo stack. Those FunctionName and SourceArn
- * references are what CloudFormation cannot resolve during change-set analysis.
- * Replacing them with literals is a property change and can replace the
- * physical permission, so this check keeps the generated document unchanged.
+ * The demo application stack no longer owns the retry permission. Declaring
+ * it here would make the next demo change set add or replace the retained
+ * statement. The rule stays in this stack, without a physical name.
  */
 export function retrySchedulePermission(template) {
-  const block = retryFunctionBlock(template);
-  const functionName = block.match(/^ +FunctionName: (.+)$/m)?.[1] ?? "";
-  const schedule = block.slice(block.indexOf("RetrySchedule:"));
+  const rule = resourceBlock(template, "ContactRetryFunctionRetrySchedule");
+  const retryFunction = resourceBlock(template, "ContactRetryFunction");
+  const functionName = (retryFunction.match(/^ +FunctionName: (.+)$/m)?.[1] ?? "").trim();
+  const declaresPermission = /^ {2}ContactRetryFunctionRetrySchedulePermission:/m.test(template);
   const risks = [];
-  if (!functionName || /^[!{]/.test(functionName)) {
-    risks.push("retry function name is not a literal");
-  }
+  if (!functionName || /^[!{]/.test(functionName)) risks.push("retry function name is not a literal");
   if (functionName !== DEMO.retryFunction) {
     risks.push("retry function name differs from the deployed demo function");
   }
-  if (/^ +Name:/m.test(schedule)) {
-    risks.push("EventBridge rule name would replace the existing rule");
-  }
-  if (template.includes("SourceAccount")) {
-    risks.push("SourceAccount would replace the Lambda permission");
-  }
-  if (!schedule.includes("Type: Schedule") || !schedule.includes("Schedule: rate(5 minutes)")) {
-    risks.push("retry schedule changed");
+  if (declaresPermission) risks.push("demo template declares the retained retry permission");
+  if (/^ +Name:/m.test(rule)) risks.push("EventBridge rule name would replace the existing rule");
+  if (template.includes("SourceAccount")) risks.push("SourceAccount would replace the Lambda permission");
+  if (!rule.includes("ScheduleExpression: rate(5 minutes)")) risks.push("retry schedule changed");
+  if (!rule.includes("!GetAtt ContactRetryFunction.Arn")) {
+    risks.push("rule target is not the retry function");
   }
   return {
     functionName,
+    declaresPermission,
     requiresReplacement: risks.length > 0,
     risks,
-    permission: DEPLOYED_RETRY_PERMISSION,
   };
+}
+
+function insertProductionPermission(template) {
+  if (/^ {2}ContactRetryFunctionRetrySchedulePermission:/m.test(template)) {
+    throw new Error("The demo template must not declare the retry permission.");
+  }
+  const marker = "  ContactHttpApi:";
+  const index = template.indexOf(marker);
+  if (index === -1) throw new Error("ContactHttpApi was not found.");
+  const block = PRODUCTION_RETRY_PERMISSION.replaceAll("\n", lineEnding(template));
+  return template.slice(0, index) + block + template.slice(index);
 }
 
 export function renderContactTemplate(template, environment) {
@@ -103,6 +112,22 @@ export function renderContactTemplate(template, environment) {
         throw new Error(`Expected one ${property} literal for ${DEMO[key]}.`);
       }
       rendered = rendered.replace(pattern, `$1${target[key]}`);
+    }
+    rendered = insertProductionPermission(rendered);
+    const permission = resourceBlock(rendered, "ContactRetryFunctionRetrySchedulePermission");
+    if (!permission.includes("FunctionName: !Ref ContactRetryFunction")) {
+      throw new Error("Production retry permission must reference its own function.");
+    }
+    if (!permission.includes("SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn")) {
+      throw new Error("Production retry permission must reference its own rule.");
+    }
+    if (rendered.includes("GHXjmJNlS8ce") || rendered.includes(`function:${DEMO.retryFunction}`)) {
+      throw new Error("Production template still targets the demo retry function or rule.");
+    }
+  } else {
+    const demoPermission = retrySchedulePermission(rendered);
+    if (demoPermission.requiresReplacement) {
+      throw new Error(`Demo retry schedule is not safe: ${demoPermission.risks.join("; ")}`);
     }
   }
   for (const { property, key } of PHYSICAL_NAMES) {
@@ -134,8 +159,5 @@ if (invokedDirectly) {
   const source = new URL("../infra/contact-api/template.yaml", import.meta.url);
   const template = readFileSync(source, "utf8");
   const rendered = renderContactTemplate(template, environment);
-  if (environment === "demo" && retrySchedulePermission(rendered).requiresReplacement) {
-    throw new Error("Demo retry permission would require replacement.");
-  }
   writeFileSync(output, rendered);
 }

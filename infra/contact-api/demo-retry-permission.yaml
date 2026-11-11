@@ -1,0 +1,19 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Existing demo permission that allows the retry schedule to invoke
+  occasionfun-co-uk-contact-retry. Stack name
+  occasionfun-co-uk-contact-retry-permission. CI does not deploy this
+  template and does not repeat the one-time import. The function name and
+  rule ARN are the live statement values; changing either replaces the
+  permission.
+
+Resources:
+  ContactRetryFunctionRetrySchedulePermission:
+    Type: AWS::Lambda::Permission
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: occasionfun-co-uk-contact-retry
+      Principal: events.amazonaws.com
+      SourceArn: arn:aws:events:eu-west-2:796174527529:rule/occasionfun-co-uk-contact-ContactRetryFunctionRetry-GHXjmJNlS8ce

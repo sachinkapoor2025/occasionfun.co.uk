@@ -2,15 +2,7 @@ export function renderContactTemplate(template: string, environment: string): st
 
 export function retrySchedulePermission(template: string): {
   functionName: string;
+  declaresPermission: boolean;
   requiresReplacement: boolean;
   risks: string[];
-  permission: {
-    Type: "AWS::Lambda::Permission";
-    Properties: {
-      Action: "lambda:InvokeFunction";
-      FunctionName: { Ref: "ContactRetryFunction" };
-      Principal: "events.amazonaws.com";
-      SourceArn: { "Fn::GetAtt": ["ContactRetryFunctionRetrySchedule", "Arn"] };
-    };
-  };
 };

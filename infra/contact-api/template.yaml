@@ -167,12 +167,18 @@ Resources:
               Action:
                 - secretsmanager:GetSecretValue
               Resource: !Ref SmtpSecretArn
-      Events:
-        RetrySchedule:
-          Type: Schedule
-          Properties:
-            Schedule: rate(5 minutes)
-            Description: Retry pending OccasionFun.co.uk contact notifications.
+
+  # The invoke permission for this rule belongs to the separate stack
+  # occasionfun-co-uk-contact-retry-permission. A Schedule event would
+  # make SAM declare that permission again.
+  ContactRetryFunctionRetrySchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Retry pending OccasionFun.co.uk contact notifications.
+      ScheduleExpression: rate(5 minutes)
+      Targets:
+        - Arn: !GetAtt ContactRetryFunction.Arn
+          Id: ContactRetryFunctionRetryScheduleLambdaTarget
 
   ContactHttpApi:
     Type: AWS::Serverless::HttpApi
