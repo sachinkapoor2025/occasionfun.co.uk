@@ -50,9 +50,11 @@ function retryFunctionBlock(template) {
 }
 
 /**
- * SAM's Schedule event generates this permission. It matches the permission
- * already deployed when the function name stays the demo literal and the
- * schedule does not set a rule name or SourceAccount.
+ * SAM's Schedule event generates this permission. The document matches the
+ * permission already stored on the demo stack. Those FunctionName and SourceArn
+ * references are what CloudFormation cannot resolve during change-set analysis.
+ * Replacing them with literals is a property change and can replace the
+ * physical permission, so this check keeps the generated document unchanged.
  */
 export function retrySchedulePermission(template) {
   const block = retryFunctionBlock(template);

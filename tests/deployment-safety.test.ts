@@ -209,6 +209,45 @@ describe("change set safety", () => {
     expect(findings).toEqual([]);
   });
 
+  it("rejects conditional replacement or removal of the deployed retry permission", () => {
+    const conditional = findUnsafeChanges(
+      [
+        {
+          ResourceChange: {
+            Action: "Modify",
+            LogicalResourceId: "ContactRetryFunctionRetrySchedulePermission",
+            ResourceType: "AWS::Lambda::Permission",
+            Replacement: "Conditional",
+          },
+        },
+      ],
+      { mode: "update" },
+    );
+    expect(conditional).toEqual([
+      {
+        logicalId: "ContactRetryFunctionRetrySchedulePermission",
+        action: "Modify",
+        replacement: "Conditional",
+        resourceType: "AWS::Lambda::Permission",
+        reasons: ["replacement"],
+      },
+    ]);
+    const removed = findUnsafeChanges(
+      [
+        {
+          ResourceChange: {
+            Action: "Remove",
+            LogicalResourceId: "ContactRetryFunctionRetrySchedulePermission",
+            ResourceType: "AWS::Lambda::Permission",
+            Replacement: "False",
+          },
+        },
+      ],
+      { mode: "update" },
+    );
+    expect(removed[0]?.reasons).toContain("deletion");
+  });
+
   it("rejects replacement True and Conditional on their own", () => {
     const replacement = findUnsafeChanges(
       [

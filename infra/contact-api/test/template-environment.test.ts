@@ -76,6 +76,10 @@ describe("contact API environments", () => {
         SourceArn: { "Fn::GetAtt": ["ContactRetryFunctionRetrySchedule", "Arn"] },
       },
     });
+    expect(template).not.toMatch(/Type:\s*AWS::Lambda::Permission/);
+    expect(template).not.toContain("GHXjmJNlS8ce");
+    expect(template).not.toMatch(/SourceArn:\s*arn:aws:events:/);
+    expect(template).not.toContain("lambda:InvokeFunction*");
   });
 
   it("gives the future production stack its own literal names", () => {
@@ -90,6 +94,11 @@ describe("contact API environments", () => {
     expect(hasLiteralLine(production, "FunctionName", demoNames.retryFunction)).toBe(false);
     expect(production).not.toMatch(/^ +(TableName|LogGroupName|FunctionName):\s*[!{]/m);
     expect(production).not.toContain("SourceAccount");
+    expect(production).not.toContain("GHXjmJNlS8ce");
+    expect(production).not.toMatch(/Type:\s*AWS::Lambda::Permission/);
+    expect(production.match(/Type: Schedule/g)).toHaveLength(1);
+    expect(production).toContain("FunctionName: occasionfun-co-uk-prod-contact-retry");
+    expect(production).not.toContain("FunctionName: occasionfun-co-uk-contact-retry");
     expect(renderContactTemplate(template, "demo")).toBe(template);
   });
 
