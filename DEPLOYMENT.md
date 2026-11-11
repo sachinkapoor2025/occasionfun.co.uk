@@ -96,18 +96,19 @@ The demo application stack no longer declares `ContactRetryFunctionRetrySchedule
 
 `describe-stacks` creates the production stack only when CloudFormation returns the ValidationError line `Stack with id occasionfun-co-uk-prod-contact does not exist` and the production workflow has already passed its environment and variable checks. Access denied, invalid credentials, network errors, throttling, and any other describe error stop the job. An existing stack is updated and is never deleted or recreated. Demo still refuses to create a missing stack.
 
-### Production frontend — not enabled
+### Production frontend
 
-The production Amplify job does not call Amplify and does not publish the site. These items are still open:
+The GitHub production job does not publish the site. Amplify app `d2oib89bmco9su` builds the connected branch from `amplify.yml`. The `main` branch exists and auto-build is enabled. The `demo` branch remains the demo frontend.
 
-- Confirm or create the Amplify branch for `main` on app `d2oib89bmco9su`.
-- After the production stack exists, set that branch's `NEXT_PUBLIC_CONTACT_ENDPOINT` to the production API only.
-- Set `NEXT_PUBLIC_SITE_URL` to `https://occasionfun.co.uk` for that branch.
-- Keep the demo API and demo DynamoDB table off the production branch.
-- DNS for `occasionfun.co.uk` is unchanged by these workflows.
-- Enable the production frontend job only after the items above are reviewed.
+`amplify.yml` installs Node.js 24 before `npm ci`. The frontend does not read Amplify SSM parameters, so the build does not need those secrets.
 
-`amplify.yml` runs `scripts/amplify-public-env.mjs`. The demo branch uses the existing demo API and `https://demo.d2oib89bmco9su.amplifyapp.com` when those console variables are empty. Every other branch, including `main` and `master`, fails if a `NEXT_PUBLIC_` value contains the demo API id `0e6zpkvbkj`. Those branches do not receive the demo API as a fallback. `main` and `master` default `NEXT_PUBLIC_SITE_URL` to `https://occasionfun.co.uk`. A production API URL is used only when that branch already has one. Until it is configured, the contact form shows its existing configuration message.
+`scripts/amplify-public-env.mjs` chooses the public contact URL:
+
+- `demo` uses `https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact` when its variable is empty, and fails if a `NEXT_PUBLIC_` value contains the production API id `k20xd6a2pd`.
+- `main` and `master` use `https://k20xd6a2pd.execute-api.eu-west-2.amazonaws.com/contact` when their variable is empty. Any other contact URL fails the build. A value containing the demo API id `0e6zpkvbkj` fails the build. The site URL defaults to `https://occasionfun.co.uk`.
+- The generated file contains only `NEXT_PUBLIC_` values. AWS credentials and the SMTP secret are not written into it.
+
+Amplify branch variables override an app-level variable with the same name. The app-level map is empty, so it cannot inject the demo API. The `main` branch variable is `https://k20xd6a2pd.execute-api.eu-west-2.amazonaws.com/contact`. The `demo` branch variable is `https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact`. Custom domains are not changed by this build.
 
 ## GitHub configuration
 

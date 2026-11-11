@@ -1,36 +1,64 @@
 import { writeFileSync } from "node:fs";
 import { DEMO, PRODUCTION } from "./deployment-targets.mjs";
 
+function publicValues(current) {
+  return Object.entries(current).filter(
+    ([key, value]) => key.startsWith("NEXT_PUBLIC_") && typeof value === "string" && value.length > 0,
+  );
+}
+
+function mentionsApi(value, target) {
+  return value === target.endpoint || value.includes(target.apiId);
+}
+
+function refuseApi(branch, label) {
+  throw new Error(`Amplify branch "${branch || "(unset)"}" refused the ${label} contact API.`);
+}
+
 /**
- * Demo is the only branch that may fall back to the existing demo API.
- * Every other branch refuses that API id and endpoint. An empty production
- * endpoint stays empty so the demo API is never injected as a fallback.
+ * Demo may use only the demo API and falls back to it when the branch
+ * variable is empty. main and master may use only the production API and
+ * fall back to it when the branch variable is empty. A demo URL on any
+ * other branch, or a production URL on demo, is refused.
  */
 export function resolvePublicEnv(branch, current = {}) {
   const name = typeof branch === "string" ? branch : "";
   const endpoint = current.NEXT_PUBLIC_CONTACT_ENDPOINT ?? "";
   const site = current.NEXT_PUBLIC_SITE_URL ?? "";
+  const values = publicValues(current);
 
-  if (name !== "demo") {
-    for (const [key, value] of Object.entries(current)) {
-      if (!key.startsWith("NEXT_PUBLIC_") || typeof value !== "string" || value.length === 0) {
-        continue;
-      }
-      if (value === DEMO.endpoint || value.includes(DEMO.apiId)) {
-        throw new Error(
-          `Amplify branch "${name || "(unset)"}" refused the demo contact API.`,
-        );
-      }
+  if (name === "demo") {
+    if (values.some(([, value]) => mentionsApi(value, PRODUCTION))) {
+      refuseApi(name, "production");
     }
     return {
-      NEXT_PUBLIC_CONTACT_ENDPOINT: endpoint,
-      NEXT_PUBLIC_SITE_URL: site || (name === "main" || name === "master" ? PRODUCTION.siteUrl : ""),
+      NEXT_PUBLIC_CONTACT_ENDPOINT: endpoint || DEMO.endpoint,
+      NEXT_PUBLIC_SITE_URL: site || DEMO.siteUrl,
+    };
+  }
+
+  if (values.some(([, value]) => mentionsApi(value, DEMO))) {
+    refuseApi(name, "demo");
+  }
+
+  if (name === "main" || name === "master") {
+    const chosen = endpoint || PRODUCTION.endpoint;
+    const hostname = URL.canParse(chosen) ? new URL(chosen).hostname : "";
+    const productionHost = new URL(PRODUCTION.endpoint).hostname;
+    if (chosen !== PRODUCTION.endpoint || hostname !== productionHost) {
+      throw new Error(
+        `Amplify branch "${name}" refused a contact API that is not the production API.`,
+      );
+    }
+    return {
+      NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint,
+      NEXT_PUBLIC_SITE_URL: site || PRODUCTION.siteUrl,
     };
   }
 
   return {
-    NEXT_PUBLIC_CONTACT_ENDPOINT: endpoint || DEMO.endpoint,
-    NEXT_PUBLIC_SITE_URL: site || DEMO.siteUrl,
+    NEXT_PUBLIC_CONTACT_ENDPOINT: endpoint,
+    NEXT_PUBLIC_SITE_URL: site,
   };
 }
 

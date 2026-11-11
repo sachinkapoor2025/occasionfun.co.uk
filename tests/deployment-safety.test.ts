@@ -21,7 +21,7 @@ import {
   verifyAutoBuildDisabled,
 } from "../scripts/amplify-demo-release.mjs";
 import { classifyDescribeStacks } from "../scripts/classify-stack-describe.mjs";
-import { resolvePublicEnv } from "../scripts/amplify-public-env.mjs";
+import { renderPublicEnv, resolvePublicEnv } from "../scripts/amplify-public-env.mjs";
 import {
   assertDeployConfig,
   parseFlatYaml,
@@ -574,25 +574,59 @@ describe("GitHub Actions workflows", () => {
 
   it("keeps the Amplify demo fallback off every non-demo branch", () => {
     const amplify = readFileSync(path.join(root, "amplify.yml"), "utf8");
+    expect(amplify).toContain("nvm install 24");
+    expect(amplify).toContain("nvm alias default 24");
     expect(amplify).toContain("node scripts/amplify-public-env.mjs");
     expect(resolvePublicEnv("demo", {})).toEqual({
       NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint,
       NEXT_PUBLIC_SITE_URL: DEMO.siteUrl,
     });
-    const productionEndpoint = "https://prod123.execute-api.eu-west-2.amazonaws.com/contact";
     expect(
-      resolvePublicEnv("main", { NEXT_PUBLIC_CONTACT_ENDPOINT: productionEndpoint }),
+      resolvePublicEnv("demo", { NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint }),
     ).toEqual({
-      NEXT_PUBLIC_CONTACT_ENDPOINT: productionEndpoint,
+      NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint,
+      NEXT_PUBLIC_SITE_URL: DEMO.siteUrl,
+    });
+    expect(resolvePublicEnv("main", {})).toEqual({
+      NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint,
       NEXT_PUBLIC_SITE_URL: PRODUCTION.siteUrl,
     });
-    expect(resolvePublicEnv("master", {}).NEXT_PUBLIC_CONTACT_ENDPOINT).toBe("");
+    expect(
+      resolvePublicEnv("main", { NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint }),
+    ).toEqual({
+      NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint,
+      NEXT_PUBLIC_SITE_URL: PRODUCTION.siteUrl,
+    });
+    expect(new URL(PRODUCTION.endpoint).hostname).toBe(
+      "k20xd6a2pd.execute-api.eu-west-2.amazonaws.com",
+    );
+    expect(resolvePublicEnv("master", {}).NEXT_PUBLIC_CONTACT_ENDPOINT).toBe(
+      PRODUCTION.endpoint,
+    );
     expect(resolvePublicEnv("master", {}).NEXT_PUBLIC_SITE_URL).toBe(PRODUCTION.siteUrl);
     for (const branch of ["main", "master", "feature", "production", ""]) {
       expect(() =>
         resolvePublicEnv(branch, { NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint }),
       ).toThrow(/refused the demo contact API/);
     }
+    expect(() =>
+      resolvePublicEnv("main", {
+        NEXT_PUBLIC_CONTACT_ENDPOINT: "https://other.execute-api.eu-west-2.amazonaws.com/contact",
+      }),
+    ).toThrow(/not the production API/);
+    expect(() =>
+      resolvePublicEnv("demo", { NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint }),
+    ).toThrow(/refused the production contact API/);
+    const rendered = renderPublicEnv("main", {
+      AWS_SECRET_ACCESS_KEY: "secret-value",
+      SMTP_SECRET_ARN: "arn:aws:secretsmanager:eu-west-2:796174527529:secret:smtp",
+      NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint,
+    });
+    expect(rendered).toContain(`NEXT_PUBLIC_CONTACT_ENDPOINT=${PRODUCTION.endpoint}`);
+    expect(rendered).not.toContain("AWS_SECRET_ACCESS_KEY");
+    expect(rendered).not.toContain("secret-value");
+    expect(rendered).not.toContain("secretsmanager");
+    expect(rendered).not.toContain(DEMO.apiId);
   });
 });
 

@@ -3,18 +3,30 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm ci
-        - npm ci --prefix infra/contact-api
+        # Each Amplify command runs in a new shell. Install Node 24 and make
+        # it the default before npm ci so package.json engines are satisfied.
+        # The frontend build does not read Amplify SSM secrets.
+        - |
+          nvm install 24
+          nvm alias default 24
+          nvm use 24
+          node -v
+          npm -v
+          node --input-type=module -e "import { execSync } from 'node:child_process'; const node = Number(process.versions.node.split('.')[0]); const npm = Number(execSync('npm -v', { encoding: 'utf8' }).trim().split('.')[0]); if (node < 24 || npm < 11) { console.error('Node.js 24 and npm 11 are required.'); process.exit(1); }"
+          npm ci
+          npm ci --prefix infra/contact-api
     build:
       commands:
         # Next.js inlines NEXT_PUBLIC_* at build time. The script writes
-        # .env.production from the branch rules: only the demo branch may use
-        # the existing demo API. Every other branch refuses that API and does
-        # not receive it as a fallback. The demo deployment workflow disables
-        # auto-build for the demo branch before it starts a RELEASE job.
-        # This file still runs inside that job. It does not change branch settings.
-        - node scripts/amplify-public-env.mjs
-        - set -a && . ./.env.production && set +a && npm run build
+        # .env.production from the branch rules: demo uses only the demo API,
+        # and main uses only the production API. A demo URL on main fails
+        # the build. This file does not change Amplify branch settings.
+        - |
+          nvm use 24
+          node -v
+          npm -v
+          node scripts/amplify-public-env.mjs
+          set -a && . ./.env.production && set +a && npm run build
   artifacts:
     baseDirectory: out
     files:

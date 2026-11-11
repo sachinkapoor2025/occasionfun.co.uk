@@ -47,7 +47,11 @@ export const PRODUCTION = {
   retryRuleName: "occasionfun-co-uk-prod-contact-retry",
   contactLogGroup: "/aws/lambda/occasionfun-co-uk-prod-contact",
   retryLogGroup: "/aws/lambda/occasionfun-co-uk-prod-contact-retry",
+  apiId: "k20xd6a2pd",
+  endpoint: "https://k20xd6a2pd.execute-api.eu-west-2.amazonaws.com/contact",
   siteUrl: "https://occasionfun.co.uk",
+  amplifyAppId: "d2oib89bmco9su",
+  amplifyBranch: "main",
   origins: ["https://occasionfun.co.uk", "https://www.occasionfun.co.uk"],
 };
 
