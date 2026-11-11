@@ -377,6 +377,7 @@ jobs:
           bash scripts/deploy-contact-stack.sh \
             --environment prod \
             --stack-name occasionfun-co-uk-prod-contact \
+            --role-arn arn:aws:iam::796174527529:role/occasionfun-cloudformation-production \
             --parameters-file "$RUNNER_TEMP/contact-parameters.yaml" \
             --allow-create true \
             --expected-table occasionfun-co-uk-prod-leads \

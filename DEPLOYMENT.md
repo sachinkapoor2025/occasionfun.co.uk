@@ -51,7 +51,7 @@ Sequence:
 
 The demo stack is not created when it is missing. The workflow does not create or update the SMTP secret. Lambda artifacts go to the SAM CLI managed bucket, and the job stops if that bucket is one of the website buckets.
 
-Every demo change set is created with execution role `arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. This repository does not create that role. After CloudFormation associates it with `occasionfun-co-uk-contact`, later updates of that stack keep using it. The production script path does not pass this role. A production run that supplies it stops before AWS is called. The stack name, API `0e6zpkvbkj`, table `occasionfun-co-uk-leads`, endpoint, SMTP secret, and existing physical names stay the same. Additions, removals, and replacements are still rejected before the change set is executed.
+Every demo change set is created with execution role `arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. This repository does not create that role. After CloudFormation associates it with `occasionfun-co-uk-contact`, later updates of that stack keep using it. Production passes `arn:aws:iam::796174527529:role/occasionfun-cloudformation-production` and rejects the demo role before AWS is called. The stack name, API `0e6zpkvbkj`, table `occasionfun-co-uk-leads`, endpoint, SMTP secret, and existing physical names stay the same. Additions, removals, and replacements are still rejected before the change set is executed.
 
 ### Amplify auto-build
 
@@ -83,7 +83,7 @@ Backend deployment starts only when all of these are true:
 
 Those steps are not a substitute for configuring the environment. Create the environment and its reviewers before setting the variable. A missing environment does not approve a deployment: the reviewer check fails before AWS credentials are configured.
 
-Demo and production use those credentials and retain separate deployment targets, templates, stacks, and CloudFormation execution-role configuration. Demo builds `template.demo.yaml`, deploys stack `occasionfun-co-uk-contact`, and passes execution role `arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. Production builds `template.production.yaml`, deploys stack `occasionfun-co-uk-prod-contact`, and passes no CloudFormation execution role. A production run that supplies the demo role stops before AWS is called.
+Demo and production use those credentials and retain separate deployment targets, templates, stacks, and CloudFormation execution-role configuration. Demo builds `template.demo.yaml`, deploys stack `occasionfun-co-uk-contact`, and passes execution role `arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. Production builds `template.production.yaml`, deploys stack `occasionfun-co-uk-prod-contact`, and passes execution role `arn:aws:iam::796174527529:role/occasionfun-cloudformation-production`. A production run that supplies the demo role, or any other role, stops before AWS is called. The production role must already exist. This repository does not create it. Its trust policy allows only `cloudformation.amazonaws.com` to assume it. `occasionfun-github-deploy` may pass only that role to CloudFormation, and the production `CreateChangeSet` call must name it.
 
 The production stack is `occasionfun-co-uk-prod-contact`. Its parameters are `Environment=prod`, the same SMTP secret ARN, and only:
 
@@ -141,7 +141,7 @@ Region for every AWS step: `eu-west-2`.
 | AWS credentials | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | The same secrets |
 | Template | `template.demo.yaml` | `template.production.yaml` |
 | Stack | `occasionfun-co-uk-contact` | `occasionfun-co-uk-prod-contact` |
-| CloudFormation role | `occasionfun-cloudformation-demo` | No execution role is passed |
+| CloudFormation role | `occasionfun-cloudformation-demo` | `occasionfun-cloudformation-production` |
 | API | `0e6zpkvbkj` | A new API created by the production stack |
 | Contact Lambda | `occasionfun-co-uk-contact` | `occasionfun-co-uk-prod-contact` |
 | Retry Lambda | `occasionfun-co-uk-contact-retry` | `occasionfun-co-uk-prod-contact-retry` |

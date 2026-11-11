@@ -31,6 +31,7 @@ CHECK_ONLY="false"
 REQUESTED_ROLE_ARN=""
 ROLE_ARN=""
 DEMO_CLOUDFORMATION_ROLE_ARN="arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo"
+PRODUCTION_CLOUDFORMATION_ROLE_ARN="arn:aws:iam::796174527529:role/occasionfun-cloudformation-production"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -67,10 +68,13 @@ elif [ "$ENVIRONMENT" = "prod" ]; then
     echo "Production cannot use the demo CloudFormation execution role."
     exit 1
   fi
-  if [ -n "$REQUESTED_ROLE_ARN" ]; then
-    echo "Production deployment does not pass a CloudFormation execution role."
+  if [ -n "$REQUESTED_ROLE_ARN" ] && [ "$REQUESTED_ROLE_ARN" != "$PRODUCTION_CLOUDFORMATION_ROLE_ARN" ]; then
+    echo "Production deployment rejected a different CloudFormation execution role."
+    echo "Expected: $PRODUCTION_CLOUDFORMATION_ROLE_ARN"
     exit 1
   fi
+  ROLE_ARN="$PRODUCTION_CLOUDFORMATION_ROLE_ARN"
+  echo "Production change sets use CloudFormation role ${ROLE_ARN}."
 fi
 
 export AWS_REGION="eu-west-2"
@@ -190,6 +194,11 @@ classify_status=$?
 set -e
 if [ "$classify_status" -ne 0 ]; then
   echo "Could not determine whether stack ${STACK_NAME} exists (${classification:-$(cat "$describe_reason")}). No change set was created."
+  echo "aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${AWS_REGION} exited ${describe_status}."
+  if [ -s "$describe_stderr" ]; then
+    echo "AWS CLI stderr:"
+    cat "$describe_stderr"
+  fi
   exit 1
 fi
 
@@ -242,6 +251,8 @@ sam_args=(
 )
 if [ "$ENVIRONMENT" = "demo" ]; then
   sam_args+=(--role-arn "$DEMO_CLOUDFORMATION_ROLE_ARN")
+elif [ "$ENVIRONMENT" = "prod" ]; then
+  sam_args+=(--role-arn "$PRODUCTION_CLOUDFORMATION_ROLE_ARN")
 fi
 set +e
 sam "${sam_args[@]}" \
