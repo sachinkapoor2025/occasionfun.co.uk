@@ -24,6 +24,7 @@ const prodNames = {
   table: "occasionfun-co-uk-prod-leads",
   contactFunction: "occasionfun-co-uk-prod-contact",
   retryFunction: "occasionfun-co-uk-prod-contact-retry",
+  retryRuleName: "occasionfun-co-uk-prod-contact-retry",
   contactLogGroup: "/aws/lambda/occasionfun-co-uk-prod-contact",
   retryLogGroup: "/aws/lambda/occasionfun-co-uk-prod-contact-retry",
   subjectPrefix: "[PROD]",
@@ -110,6 +111,9 @@ describe("contact API environments", () => {
     expect(production).toContain("FunctionName: !Ref ContactRetryFunction");
     expect(production).toContain("SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn");
     expect(production).toContain("FunctionName: occasionfun-co-uk-prod-contact-retry");
+    expect(production).toContain(`Name: ${prodNames.retryRuleName}`);
+    expect(prodNames.retryRuleName.length).toBeLessThanOrEqual(64);
+    expect(prodNames.retryRuleName.startsWith("occasionfun-co-uk-prod-contact-")).toBe(true);
     expect(production).not.toContain("FunctionName: occasionfun-co-uk-contact-retry");
     expect(production).not.toContain("arn:aws:lambda:");
     expect(production).not.toContain("arn:aws:events:");

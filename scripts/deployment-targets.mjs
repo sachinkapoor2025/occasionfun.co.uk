@@ -44,6 +44,7 @@ export const PRODUCTION = {
   table: "occasionfun-co-uk-prod-leads",
   contactFunction: "occasionfun-co-uk-prod-contact",
   retryFunction: "occasionfun-co-uk-prod-contact-retry",
+  retryRuleName: "occasionfun-co-uk-prod-contact-retry",
   contactLogGroup: "/aws/lambda/occasionfun-co-uk-prod-contact",
   retryLogGroup: "/aws/lambda/occasionfun-co-uk-prod-contact-retry",
   siteUrl: "https://occasionfun.co.uk",

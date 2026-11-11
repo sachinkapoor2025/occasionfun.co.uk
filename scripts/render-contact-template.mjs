@@ -82,6 +82,23 @@ export function retrySchedulePermission(template) {
   };
 }
 
+function nameProductionRetryRule(template) {
+  const name = PRODUCTION.retryRuleName;
+  if (name.length > 64 || !name.startsWith("occasionfun-co-uk-prod-contact-")) {
+    throw new Error("Production retry rule name is outside the execution role permission.");
+  }
+  const ending = lineEnding(template);
+  const needle = `ContactRetryFunctionRetrySchedule:${ending}    Type: AWS::Events::Rule${ending}    Properties:${ending}`;
+  if (!template.includes(needle)) {
+    throw new Error("Production retry rule properties were not found.");
+  }
+  const rule = resourceBlock(template, "ContactRetryFunctionRetrySchedule");
+  if (/^ +Name:/m.test(rule)) {
+    throw new Error("The source retry rule must not set Name.");
+  }
+  return template.replace(needle, `${needle}      Name: ${name}${ending}`);
+}
+
 function insertProductionPermission(template) {
   if (/^ {2}ContactRetryFunctionRetrySchedulePermission:/m.test(template)) {
     throw new Error("The demo template must not declare the retry permission.");
@@ -113,6 +130,7 @@ export function renderContactTemplate(template, environment) {
       }
       rendered = rendered.replace(pattern, `$1${target[key]}`);
     }
+    rendered = nameProductionRetryRule(rendered);
     rendered = insertProductionPermission(rendered);
     const permission = resourceBlock(rendered, "ContactRetryFunctionRetrySchedulePermission");
     if (!permission.includes("FunctionName: !Ref ContactRetryFunction")) {
