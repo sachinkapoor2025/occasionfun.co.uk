@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -335,32 +335,42 @@ describe("demo smoke checks", () => {
 });
 
 describe("GitHub Actions workflows", () => {
-  const ci = workflow("ci.yml");
-  const demo = workflow("deploy-demo.yml");
-  const production = workflow("deploy-production.yml");
-  const smoke = workflow("smoke-test.yml");
-  const all = [ci, demo, production, smoke];
+  const pipeline = workflow("ci-cd.yml");
+  const validate = pipeline.slice(pipeline.indexOf("  validate:"), pipeline.indexOf("  deploy-demo:"));
+  const demo = pipeline.slice(pipeline.indexOf("  deploy-demo:"), pipeline.indexOf("  deploy-production:"));
+  const production = pipeline.slice(
+    pipeline.indexOf("  deploy-production:"),
+    pipeline.indexOf("  smoke-test:"),
+  );
+  const smoke = pipeline.slice(pipeline.indexOf("  smoke-test:"));
 
   it("keeps validation on pull requests and on demo and main", () => {
-    expect(ci).toContain("pull_request:");
-    expect(ci).toContain("branches: [main, master, demo]");
-    expect(ci).toContain("npm run lint");
-    expect(ci).toContain("npm run typecheck");
-    expect(ci).toContain("npm run test");
-    expect(ci).toContain("npm run typecheck --prefix infra/contact-api");
-    expect(ci).toContain("npm test --prefix infra/contact-api");
-    expect(ci).toContain("sam build --template template.yaml");
-    expect(ci).toContain("sam validate --lint --template template.yaml");
-    expect(ci).toContain("npm run build");
-    expect(ci).toContain("node-version: \"24\"");
+    expect(pipeline).toContain("pull_request:");
+    expect(pipeline).toContain("branches: [main, demo]");
+    expect(pipeline).toContain("branches: [demo, main, master]");
+    expect(validate).toContain("npm run lint");
+    expect(validate).toContain("npm run typecheck");
+    expect(validate).toContain("npm run test");
+    expect(validate).toContain("npm run typecheck --prefix infra/contact-api");
+    expect(validate).toContain("npm test --prefix infra/contact-api");
+    expect(validate).toContain("sam build --template template.yaml");
+    expect(validate).toContain("sam validate --lint --template template.yaml");
+    expect(validate).toContain("npm run build");
+    expect(validate).toContain("node-version: \"24\"");
+    expect(validate).not.toContain("secrets.AWS_ACCESS_KEY_ID");
+    expect(validate).not.toContain("deploy-contact-stack.sh");
   });
 
-  it("deploys demo only after CI and only to the existing resources", () => {
+  it("deploys demo only after validation of that push and only to the existing resources", () => {
     const deployScript = readFileSync(path.join(root, "scripts/deploy-contact-stack.sh"), "utf8");
-    expect(demo).toContain("branches: [demo]");
-    expect(demo).toContain("workflow_dispatch:");
-    expect(demo).toContain("bash scripts/wait-for-ci.sh");
-    expect(demo).toContain("cancel-in-progress: false");
+    expect(pipeline).toContain("branches: [demo, main, master]");
+    expect(pipeline).not.toContain("workflow_dispatch:");
+    expect(pipeline).not.toContain("workflow_run:");
+    expect(pipeline).not.toContain("wait-for-ci.sh");
+    expect(pipeline).toContain("cancel-in-progress: false");
+    expect(demo).toContain("needs: validate");
+    expect(demo).toContain("github.event_name == 'push' && github.ref == 'refs/heads/demo'");
+    expect(demo).toContain("ref: ${{ github.sha }}");
     expect(demo).toContain("--stack-name occasionfun-co-uk-contact");
     expect(demo).toContain("--allow-create false");
     expect(demo).toContain(DEMO.table);
@@ -373,6 +383,7 @@ describe("GitHub Actions workflows", () => {
     expect(demo).toContain("aws-region: eu-west-2");
     expect(demo).toContain("secrets.AWS_ACCESS_KEY_ID");
     expect(demo).toContain("secrets.AWS_SECRET_ACCESS_KEY");
+    expect(demo).not.toContain("secrets.AWS_PRODUCTION_ACCESS_KEY_ID");
     expect(deployScript).toContain("--no-execute-changeset");
     expect(deployScript.indexOf("assert-safe-change-set.mjs")).toBeLessThan(
       deployScript.indexOf("execute-change-set"),
@@ -390,72 +401,60 @@ describe("GitHub Actions workflows", () => {
     expect(deployScript.indexOf("No changes to deploy")).toBeLessThan(
       deployScript.indexOf("mktemp --suffix=.json"),
     );
-    const deployJob = demo.slice(demo.indexOf("  deploy:"), demo.indexOf("  smoke:"));
-    const smokeJob = demo.slice(demo.indexOf("  smoke:"));
-    expect(deployJob).toContain("node scripts/amplify-demo-release.mjs release");
-    expect(deployJob).not.toContain("disable-auto-build");
+    expect(demo).toContain("node scripts/amplify-demo-release.mjs release");
+    expect(demo.indexOf("disable-auto-build")).toBeLessThan(demo.indexOf("deploy-contact-stack.sh"));
+    expect(demo.indexOf("deploy-contact-stack.sh")).toBeLessThan(
+      demo.indexOf("amplify-demo-release.mjs release"),
+    );
     expect(production).not.toContain("disable-auto-build");
     expect(production).not.toContain("update-branch");
-    expect(deployJob).not.toContain("smoke-demo.mjs");
-    expect(deployJob).not.toContain('"$commit"*');
-    expect(smokeJob).toContain("needs: deploy");
-    expect(smokeJob).toContain("persist-credentials: false");
-    expect(smokeJob).toContain('GITHUB_TOKEN: ""');
-    expect(smokeJob).toContain('GH_TOKEN: ""');
-    expect(smokeJob).toContain("node scripts/smoke-demo.mjs");
-    expect(smokeJob).not.toContain("AWS_ACCESS_KEY_ID");
-    expect(smokeJob).not.toContain("AWS_SECRET_ACCESS_KEY");
-    expect(demo).not.toContain("id-token:");
+    expect(demo).not.toContain("smoke-demo.mjs");
+    expect(smoke).toContain("needs: deploy-demo");
+    expect(smoke).toContain("persist-credentials: false");
+    expect(smoke).toContain('GITHUB_TOKEN: ""');
+    expect(smoke).toContain('GH_TOKEN: ""');
+    expect(smoke).toContain("node scripts/smoke-demo.mjs");
+    expect(smoke).not.toContain("AWS_ACCESS_KEY_ID");
+    expect(smoke).not.toContain("AWS_SECRET_ACCESS_KEY");
+    expect(pipeline).not.toContain("id-token:");
+    for (const removed of ["ci.yml", "deploy-demo.yml", "deploy-production.yml", "smoke-test.yml"]) {
+      expect(existsSync(path.join(root, ".github/workflows", removed))).toBe(false);
+    }
   });
 
-  it("checks demo auto-build before CI and deployment on push and manual dispatch", () => {
-    const autoBuild = demo.slice(
-      demo.indexOf("  disable-demo-auto-build:"),
-      demo.indexOf("  wait-for-ci:"),
-    );
-    const wait = demo.slice(demo.indexOf("  wait-for-ci:"), demo.indexOf("  deploy:"));
-    const deployJob = demo.slice(demo.indexOf("  deploy:"), demo.indexOf("  smoke:"));
-    const smokeJob = demo.slice(demo.indexOf("  smoke:"));
-    const runsDemoPath = (eventName: "push" | "workflow_dispatch") =>
-      eventName === "push" || eventName === "workflow_dispatch";
-
-    expect(demo).toContain("branches: [demo]");
-    expect(demo).toContain("workflow_dispatch:");
-    expect(demo).not.toContain("inputs:");
-    expect(demo).not.toContain("inputs.operation");
-    expect(autoBuild).not.toContain("\n    if:");
-    expect(wait).toContain("needs: disable-demo-auto-build");
-    expect(wait).not.toContain("\n    if:");
-    expect(deployJob).toContain("needs: wait-for-ci");
-    expect(deployJob).not.toContain("\n    if:");
-    expect(smokeJob).toContain("needs: deploy");
-    expect(smokeJob).not.toContain("\n    if:");
-    expect(demo.indexOf("  disable-demo-auto-build:")).toBeLessThan(demo.indexOf("  wait-for-ci:"));
-    expect(demo.indexOf("  wait-for-ci:")).toBeLessThan(demo.indexOf("  deploy:"));
-    expect(demo.indexOf("  deploy:")).toBeLessThan(demo.indexOf("  smoke:"));
-    expect(autoBuild).toContain("AMPLIFY_APP_ID: d2oib89bmco9su");
-    expect(autoBuild).toContain("AMPLIFY_BRANCH: demo");
-    expect(autoBuild).toContain("node scripts/amplify-demo-release.mjs disable-auto-build");
-    expect(autoBuild).not.toContain("amplify-demo-release.mjs release");
-    expect(autoBuild).not.toContain("sam build");
-    expect(autoBuild).not.toContain("deploy-contact-stack.sh");
-    expect(autoBuild).not.toContain("npm run build");
-    expect(runsDemoPath("push")).toBe(true);
-    expect(runsDemoPath("workflow_dispatch")).toBe(true);
+  it("runs demo deployment only after validation and never from a pull request", () => {
+    expect(pipeline).not.toContain("workflow_dispatch:");
+    expect(pipeline).not.toContain("inputs:");
+    expect(pipeline).not.toContain("inputs.operation");
+    expect(demo).toContain("needs: validate");
+    expect(demo).toContain("github.event_name == 'push' && github.ref == 'refs/heads/demo'");
+    expect(validate.indexOf("npm run test")).toBeLessThan(validate.length);
+    expect(pipeline.indexOf("  validate:")).toBeLessThan(pipeline.indexOf("  deploy-demo:"));
+    expect(pipeline.indexOf("  deploy-demo:")).toBeLessThan(pipeline.indexOf("  smoke-test:"));
+    expect(demo).toContain("AMPLIFY_APP_ID: d2oib89bmco9su");
+    expect(demo).toContain("AMPLIFY_BRANCH: demo");
+    expect(demo).toContain("node scripts/amplify-demo-release.mjs disable-auto-build");
+    expect(demo.indexOf("disable-auto-build")).toBeLessThan(demo.indexOf("sam build"));
+    expect(smoke).toContain("if: success()");
   });
 
-  it("cannot deploy production without the environment gate", () => {
-    expect(production).toContain("branches: [main]");
+  it("cannot deploy production without the environment gate or with demo credentials", () => {
+    expect(pipeline).toContain("branches: [demo, main, master]");
+    expect(production).toContain("needs: validate");
+    expect(production).toContain("github.event_name == 'push' && github.ref == 'refs/heads/main'");
     expect(production).toContain("environment: production");
     expect(production).toContain("vars.PRODUCTION_DEPLOYMENTS_ENABLED == 'true'");
-    const backend = production.slice(production.indexOf("  deploy-backend:"));
-    expect(backend.indexOf("required_reviewers")).toBeLessThan(
-      backend.indexOf("configure-aws-credentials"),
+    expect(production.indexOf("required_reviewers")).toBeLessThan(
+      production.indexOf("configure-aws-credentials"),
     );
-    expect(backend.indexOf("environment: production")).toBeLessThan(
-      backend.indexOf("required_reviewers"),
+    expect(production.indexOf("environment: production")).toBeLessThan(
+      production.indexOf("required_reviewers"),
     );
     expect(production).toContain("required_reviewers");
+    expect(production).toContain("secrets.AWS_PRODUCTION_ACCESS_KEY_ID");
+    expect(production).toContain("secrets.AWS_PRODUCTION_SECRET_ACCESS_KEY");
+    expect(production).not.toContain("secrets.AWS_ACCESS_KEY_ID");
+    expect(production).not.toContain("secrets.AWS_SECRET_ACCESS_KEY");
     expect(production).toContain("--stack-name occasionfun-co-uk-prod-contact");
     expect(production).toContain(PRODUCTION.table);
     expect(production).toContain(PRODUCTION.contactFunction);
@@ -468,13 +467,10 @@ describe("GitHub Actions workflows", () => {
   });
 
   it("does not grant OIDC permissions or print credential values", () => {
-    for (const file of all) {
-      expect(file).not.toContain("id-token:");
-      expect(file).not.toContain("--guided");
-      expect(file).not.toContain("echo ${{ secrets");
-      expect(file).not.toMatch(/AKIA[0-9A-Z]{16}/);
-    }
-    expect(smoke).toContain("workflow_dispatch:");
+    expect(pipeline).not.toContain("id-token:");
+    expect(pipeline).not.toContain("--guided");
+    expect(pipeline).not.toContain("echo ${{ secrets");
+    expect(pipeline).not.toMatch(/AKIA[0-9A-Z]{16}/);
     expect(smoke).toContain("node scripts/smoke-demo.mjs");
     expect(smoke).toContain("persist-credentials: false");
     expect(smoke).toContain('GITHUB_TOKEN: ""');
@@ -489,7 +485,7 @@ describe("GitHub Actions workflows", () => {
       ["aws-actions/configure-aws-credentials", "7474bc4690e29a8392af63c5b98e7449536d5c3a"],
       ["aws-actions/setup-sam", "f84ec7d548307efafe33230528756de3c5841a17"],
     ]);
-    for (const file of all) {
+    for (const file of [pipeline]) {
       const uses = [...file.matchAll(/uses:\s*(\S+)/g)].map((match) => match[1]);
       expect(uses.length).toBeGreaterThan(0);
       for (const use of uses) {
@@ -943,10 +939,10 @@ describe("CloudFormation execution role", () => {
     expect(samDeploy.indexOf('if [ "$ENVIRONMENT" = "demo" ]; then')).toBeLessThan(
       samDeploy.indexOf('--role-arn "$DEMO_CLOUDFORMATION_ROLE_ARN"'),
     );
-    expect(workflow("deploy-demo.yml")).toContain("--stack-name occasionfun-co-uk-contact");
-    expect(workflow("deploy-demo.yml")).toContain(DEMO.apiId);
-    expect(workflow("deploy-demo.yml")).toContain(DEMO.table);
-    expect(workflow("deploy-demo.yml")).toContain(SMTP_SECRET_ARN);
+    expect(workflow("ci-cd.yml")).toContain("--stack-name occasionfun-co-uk-contact");
+    expect(workflow("ci-cd.yml")).toContain(DEMO.apiId);
+    expect(workflow("ci-cd.yml")).toContain(DEMO.table);
+    expect(workflow("ci-cd.yml")).toContain(SMTP_SECRET_ARN);
 
     const omitted = runConfigCheck("demo");
     expect(omitted.status, omitted.stderr || omitted.stdout).toBe(0);
@@ -1030,10 +1026,14 @@ describe("CloudFormation execution role", () => {
   });
 
   it("does not let production use the demo execution role", () => {
-    expect(workflow("deploy-production.yml")).not.toContain("occasionfun-cloudformation-demo");
-    expect(workflow("deploy-production.yml")).toContain(
-      "--stack-name occasionfun-co-uk-prod-contact",
+    const productionJob = workflow("ci-cd.yml");
+    const productionSlice = productionJob.slice(
+      productionJob.indexOf("  deploy-production:"),
+      productionJob.indexOf("  smoke-test:"),
     );
+    expect(productionSlice).not.toContain("occasionfun-cloudformation-demo");
+    expect(productionSlice).not.toContain("secrets.AWS_ACCESS_KEY_ID");
+    expect(productionSlice).toContain("--stack-name occasionfun-co-uk-prod-contact");
     expect(samDeploy).not.toContain("--role-arn \"$ROLE_ARN\"");
     const result = runConfigCheck("prod", ["--role-arn", DEMO_CLOUDFORMATION_ROLE_ARN]);
     expect(result.status).toBe(1);

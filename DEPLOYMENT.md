@@ -10,36 +10,34 @@ Nothing in this change has been deployed. The workflows below are ready for revi
 
 | Workflow | File | What it does now |
 | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | Validates pull requests and pushes to `demo`, `main`, and the existing `master` trigger. |
-| Deploy demo | `.github/workflows/deploy-demo.yml` | After CI succeeds, updates stack `occasionfun-co-uk-contact` and starts the Amplify `demo` build. |
-| Deploy production | `.github/workflows/deploy-production.yml` | Prepared, and blocked until production is explicitly authorized. |
-| Smoke test | `.github/workflows/smoke-test.yml` | Checks the live demo site and the existing demo API without submitting an enquiry. |
+| CI/CD | `.github/workflows/ci-cd.yml` | Validates every pull request and push. A successful validation of a `demo` push deploys that commit and then runs smoke tests. A `main` push can deploy production only after separate approval and credentials. |
 
 Azure Pipelines remains CI-only. Its triggers are disabled and it does not deploy.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on:
+`.github/workflows/ci-cd.yml` is the only deployment workflow. Its `validate` job runs on:
 
-- pull requests
-- pushes to `demo` and `main` (the existing `master` push trigger is still present)
-- manual dispatch
+- pull requests to `demo` and `main`
+- pushes to `demo`, `main`, and `master`
 
-It installs Node.js 24, installs the frontend and contact API dependencies, then runs frontend lint, typecheck, tests, backend typecheck, backend tests, `sam build`, `sam validate --lint`, and the static export. It uploads `out/` as an artifact. It does not deploy.
+It installs Node.js 24, installs the frontend and contact API dependencies, then runs frontend lint, typecheck, tests, backend typecheck, backend tests, `sam build`, `sam validate --lint`, and the static export. It does not deploy. A failed `validate` job skips `deploy-demo`, `deploy-production`, and `smoke-test`.
 
-The static export in CI uses `NEXT_PUBLIC_SITE_URL=https://occasionfun.co.uk`. The demo deployment builds again with the demo site URL and the demo API endpoint.
+The static export in validation uses `NEXT_PUBLIC_SITE_URL=https://occasionfun.co.uk`. The demo deployment builds again with the demo site URL and the demo API endpoint.
+
+Pull requests never deploy. There is no manual dispatch.
 
 ## Demo deployment
 
-`.github/workflows/deploy-demo.yml` runs on a push to `demo` and on manual dispatch. A second demo deployment waits until the current one finishes.
+A push to `demo` runs `validate`, then `deploy-demo` for `github.sha`, then `smoke-test`. A second run for the same ref waits until the current one finishes.
 
 Sequence:
 
-1. Check Amplify app `d2oib89bmco9su`, branch `demo`, before CI or either deployment. If `enableAutoBuild` is already false, leave it unchanged. If it is true, list the visible jobs, wait until a running job belongs to another commit or has no full commit id, disable auto-build for that demo branch only, and read it back with `get-branch`. A job with a missing or short commit id is never treated as this commit. A failed verification stops the workflow before the backend and frontend run.
-2. Wait until the CI workflow has succeeded for the same commit.
-3. Check out that commit.
-4. Require `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
-5. Configure those credentials for `eu-west-2` and require account `796174527529`.
+1. `validate` checks the pushed commit. If it fails, deployment does not start.
+2. Check out that same commit.
+3. Require `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+4. Configure those credentials for `eu-west-2` and require account `796174527529`.
+5. Check Amplify app `d2oib89bmco9su`, branch `demo`. If `enableAutoBuild` is already false, leave it unchanged. If it is true, list the visible jobs, wait until a running job belongs to another commit or has no full commit id, disable auto-build for that demo branch only, and read it back with `get-branch`. A job with a missing or short commit id is never treated as this commit. A failed verification stops the job before the backend and frontend run.
 6. Install SAM CLI and Node.js 24, then install frontend and contact API dependencies.
 7. Build the contact API and run `sam build`.
 8. Create a CloudFormation change set for `occasionfun-co-uk-contact` with `sam deploy --no-execute-changeset --role-arn arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. The script adds that role on every demo run, including when the caller omits `--role-arn`. A different role ARN is rejected before AWS is called. The parameters are `Environment=demo`, the existing SMTP secret ARN, and the current demo origin list:
@@ -49,7 +47,7 @@ Sequence:
 11. Require the existing physical names and the endpoint `https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact`.
 12. Build the frontend with that endpoint and `NEXT_PUBLIC_SITE_URL=https://demo.d2oib89bmco9su.amplifyapp.com`.
 13. Publish one Amplify `RELEASE` for the full 40-character GitHub SHA. The step refuses to start unless auto-build is still false. It adopts an existing job for that exact SHA when one is already running or has succeeded. A missing job status, a missing commit id, or a commit id that is not exactly this SHA fails the step. After success, this commit must be the latest successful job. If another commit is the latest deployment, the step fails and does not start a second release.
-14. After that deploy job succeeds, a separate smoke job checks the demo site. That job has no AWS credentials.
+14. After `deploy-demo` succeeds, `smoke-test` checks the demo site. That job has no AWS credentials. It does not run for a pull request or for a production deployment.
 
 The demo stack is not created when it is missing. The workflow does not create or update the SMTP secret. Lambda artifacts go to the SAM CLI managed bucket, and the job stops if that bucket is one of the website buckets.
 
@@ -62,8 +60,8 @@ The current demo branch configuration is app `d2oib89bmco9su`, branch `demo`, wi
 The authorized demo deployment workflow turns `enableAutoBuild` off for `demo` only. That is the transition to GitHub Actions as the only publisher:
 
 - A later push does not start an Amplify build by itself. The site changes only when this workflow reaches the release step.
-- If the auto-build check fails, CI and both deployments do not start, and automatic builds stay on.
-- If CI fails after auto-build was disabled, the previous Amplify deployment stays in place.
+- If validation fails, auto-build is left unchanged and deployment does not start.
+- If the auto-build check fails, the backend and frontend steps in that job do not start, and automatic builds stay on.
 - If the workflow fails after disabling automatic builds, the previous Amplify deployment stays in place until a later run publishes a release. The Amplify console will not rebuild that push on its own.
 - `amplify.yml` still builds the frontend inside the `RELEASE` job started by GitHub Actions.
 - `aws amplify start-job --job-type RELEASE` continues to work. This workflow uses it only after auto-build reads back as disabled.
@@ -74,12 +72,14 @@ A webhook Amplify accepted before `get-branch` showed `enableAutoBuild: false` c
 
 ## Production deployment
 
-`.github/workflows/deploy-production.yml` triggers on a push to `main` and on manual dispatch. With the current repository settings it only prints that production is not authorized. It does not call AWS.
+A pull request into `main` runs `validate` only. After that pull request is merged, the push to `main` runs `validate` again. `deploy-production` stays skipped until `PRODUCTION_DEPLOYMENTS_ENABLED` is `true`. It never reads `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY`.
 
-Backend deployment starts only when both of these are true:
+Backend deployment starts only when all of these are true:
 
-1. Repository variable `PRODUCTION_DEPLOYMENTS_ENABLED` is `true`.
-2. The job is attached to the GitHub Environment named `production`, and that environment has a required-reviewer protection rule. The workflow reads the environment and stops if the rule is missing.
+1. The commit was pushed to `main` and `validate` succeeded.
+2. Repository variable `PRODUCTION_DEPLOYMENTS_ENABLED` is `true`.
+3. The job is attached to the GitHub Environment named `production`, and that environment has a required-reviewer protection rule. The workflow reads the environment and stops if the rule is missing.
+4. Repository secrets `AWS_PRODUCTION_ACCESS_KEY_ID` and `AWS_PRODUCTION_SECRET_ACCESS_KEY` are set. These are separate from the demo deploy user.
 
 Those steps are not a substitute for configuring the environment. Create the environment and its reviewers before setting the variable. A missing environment does not approve a deployment: the reviewer check fails before AWS credentials are configured.
 
@@ -111,8 +111,10 @@ Repository secrets, already expected:
 
 | Secret | Use |
 | --- | --- |
-| `AWS_ACCESS_KEY_ID` | IAM access key for account `796174527529`. |
-| `AWS_SECRET_ACCESS_KEY` | Matching secret key. |
+| `AWS_ACCESS_KEY_ID` | Demo IAM user `occasionfun-github-deploy`. Used only by `deploy-demo`. |
+| `AWS_SECRET_ACCESS_KEY` | Matching demo secret key. |
+| `AWS_PRODUCTION_ACCESS_KEY_ID` | Separate production key. Not configured, so production deployment stays blocked. |
+| `AWS_PRODUCTION_SECRET_ACCESS_KEY` | Matching production secret key. |
 
 The workflows do not print those values. Do not create an OIDC role for this path.
 
@@ -146,7 +148,7 @@ Region for every AWS step: `eu-west-2`.
 
 ## Smoke tests
 
-`Smoke test` can be run manually from the Actions tab. It also runs after a successful `Deploy demo` once that workflow file is on the default branch. `Deploy demo` runs the same checks in a later job that does not receive AWS credentials. A failed check fails that job after the deployment job has already finished.
+`smoke-test` runs after a successful `deploy-demo` job. It does not receive AWS credentials. A failed check fails that job after the deployment job has already finished. Production does not run this demo check.
 
 The checks are a GET of the demo site, an OPTIONS preflight from the demo origin, and a POST of `{}`. They expect a client error for the POST. They do not submit a valid enquiry and they do not send email. A response or page that contains an access key, the SMTP secret id, or a private key fails the job. The check prints status codes only.
 
@@ -160,13 +162,13 @@ The safety rules themselves are covered by `npm test` without calling AWS.
 
 ## Inspecting a failed deployment
 
-1. Open the failed Actions run. CI failures stay in the `CI` workflow. Demo deployment failures stay in `Deploy demo`.
+1. Open the failed Actions run of `CI/CD`. Validation failures stay in `validate`. Demo deployment failures stay in `deploy-demo`. Production stays skipped until it is separately authorized.
 2. If the log says the change set was not executed, CloudFormation did not apply it. The resource lines name the logical id, action, and replacement flag. Fix the template or parameters before running the job again. Do not execute that change set from the console.
 3. A missing AWS secret fails before `aws` is called.
 4. An account or region mismatch fails before the change set is created.
 5. A demo endpoint other than `https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact` fails the job after the stack operation.
 6. Amplify failures leave the API update in place and fail the workflow. If the log says auto-build is disabled and no release was started, re-run after the older build finishes. If another commit is the latest deployment, the release was not accepted. The Amplify console for app `d2oib89bmco9su`, branch `demo`, shows the build log. These workflow logs do not download Amplify log streams.
-7. Production runs that say deployment is not authorized have not called AWS. A production run that stops on the reviewer check has also not configured AWS credentials.
+7. A `main` push with production still blocked skips `deploy-production` and does not call AWS. A production run that stops on the reviewer check or on missing production credentials has not used the demo access keys.
 
 ## Local build
 

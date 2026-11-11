@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Wait until the CI workflow has succeeded for this exact commit.
+# Unused by .github/workflows/ci-cd.yml.
+# That workflow validates and deploys the same commit through needs: validate.
+# Wait until a named workflow has succeeded for this exact commit.
 set -euo pipefail
 
 if [ -z "${GH_TOKEN:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
