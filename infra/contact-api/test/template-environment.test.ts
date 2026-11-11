@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  renderContactTemplate,
+  retrySchedulePermission,
+} from "../../../scripts/render-contact-template.mjs";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const template = readFileSync(path.join(packageRoot, "template.yaml"), "utf8");
@@ -33,10 +37,9 @@ function parameterBlock(name: string): string {
   return match[0];
 }
 
-function conditionalNames(): Array<[string, string]> {
-  return [...template.matchAll(/: !If\r?\n\s*- IsProduction\r?\n\s*- (.+)\r?\n\s*- (.+)/g)].map(
-    (match) => [match[1], match[2]],
-  );
+function hasLiteralLine(source: string, property: string, name: string): boolean {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^ +${property}: ${escaped}\\r?$`, "m").test(source);
 }
 
 describe("contact API environments", () => {
@@ -48,14 +51,46 @@ describe("contact API environments", () => {
     expect(template).toContain('IsProduction: !Equals [!Ref Environment, "prod"]');
   });
 
-  it("keeps the existing demo physical names on the non-production branch", () => {
-    expect(conditionalNames()).toEqual([
-      [prodNames.table, demoNames.table],
-      [prodNames.contactLogGroup, demoNames.contactLogGroup],
-      [prodNames.retryLogGroup, demoNames.retryLogGroup],
-      [prodNames.contactFunction, demoNames.contactFunction],
-      [prodNames.retryFunction, demoNames.retryFunction],
-    ]);
+  it("keeps the existing demo physical names as literals", () => {
+    expect(hasLiteralLine(template, "TableName", demoNames.table)).toBe(true);
+    expect(hasLiteralLine(template, "LogGroupName", demoNames.contactLogGroup)).toBe(true);
+    expect(hasLiteralLine(template, "LogGroupName", demoNames.retryLogGroup)).toBe(true);
+    expect(hasLiteralLine(template, "FunctionName", demoNames.contactFunction)).toBe(true);
+    expect(hasLiteralLine(template, "FunctionName", demoNames.retryFunction)).toBe(true);
+    expect(template).not.toMatch(/^ +(TableName|LogGroupName|FunctionName):\s*[!{]/m);
+    expect(template).not.toContain("SourceAccount");
+    expect(template).not.toMatch(/RetrySchedule:[\s\S]*?\n +Name:/);
+  });
+
+  it("keeps the generated retry permission from requiring replacement", () => {
+    const permission = retrySchedulePermission(template);
+    expect(permission.functionName).toBe(demoNames.retryFunction);
+    expect(permission.requiresReplacement).toBe(false);
+    expect(permission.risks).toEqual([]);
+    expect(permission.permission).toEqual({
+      Type: "AWS::Lambda::Permission",
+      Properties: {
+        Action: "lambda:InvokeFunction",
+        FunctionName: { Ref: "ContactRetryFunction" },
+        Principal: "events.amazonaws.com",
+        SourceArn: { "Fn::GetAtt": ["ContactRetryFunctionRetrySchedule", "Arn"] },
+      },
+    });
+  });
+
+  it("gives the future production stack its own literal names", () => {
+    const production = renderContactTemplate(template, "prod");
+    expect(hasLiteralLine(production, "TableName", prodNames.table)).toBe(true);
+    expect(hasLiteralLine(production, "LogGroupName", prodNames.contactLogGroup)).toBe(true);
+    expect(hasLiteralLine(production, "LogGroupName", prodNames.retryLogGroup)).toBe(true);
+    expect(hasLiteralLine(production, "FunctionName", prodNames.contactFunction)).toBe(true);
+    expect(hasLiteralLine(production, "FunctionName", prodNames.retryFunction)).toBe(true);
+    expect(hasLiteralLine(production, "TableName", demoNames.table)).toBe(false);
+    expect(hasLiteralLine(production, "FunctionName", demoNames.contactFunction)).toBe(false);
+    expect(hasLiteralLine(production, "FunctionName", demoNames.retryFunction)).toBe(false);
+    expect(production).not.toMatch(/^ +(TableName|LogGroupName|FunctionName):\s*[!{]/m);
+    expect(production).not.toContain("SourceAccount");
+    expect(renderContactTemplate(template, "demo")).toBe(template);
   });
 
   it("points both functions at the table created by the same stack", () => {
@@ -63,7 +98,7 @@ describe("contact API environments", () => {
     expect(template.match(/!GetAtt LeadsTable\.Arn/g)).toHaveLength(2);
     expect(template).toContain("${LeadsTable.Arn}/index/notification-due");
     expect(template).not.toMatch(/arn:aws:dynamodb:/);
-    expect(template).not.toContain(`TableName: ${demoNames.table}`);
+    expect(template).toContain(`TableName: ${demoNames.table}`);
     expect(template).not.toContain(`TableName: ${prodNames.table}`);
   });
 
@@ -77,15 +112,9 @@ describe("contact API environments", () => {
     expect(template).not.toMatch(/Type:\s*AWS::SecretsManager::Secret/);
     expect(template.match(/secretsmanager:GetSecretValue/g)).toHaveLength(2);
 
-    const [prod, demo] = conditionalNames().reduce<[Set<string>, Set<string>]>(
-      (sets, [prodName, demoName]) => {
-        sets[0].add(prodName);
-        sets[1].add(demoName);
-        return sets;
-      },
-      [new Set<string>(), new Set<string>()],
-    );
-    expect([...demo].filter((name) => prod.has(name))).toEqual([]);
+    const demoPhysicalNames = new Set(Object.values(demoNames).filter((name) => name !== "[DEMO]"));
+    const prodPhysicalNames = new Set(Object.values(prodNames).filter((name) => name !== "[PROD]"));
+    expect([...demoPhysicalNames].filter((name) => prodPhysicalNames.has(name))).toEqual([]);
     expect(template.match(/SMTP_FROM: enquiries@occasionfun.co.uk/g)).toHaveLength(2);
     expect(
       template.match(
@@ -110,7 +139,11 @@ describe("contact API environments", () => {
     expect(template).toContain("ApiId: !Ref ContactHttpApi");
     expect(template.match(/Type: Schedule/g)).toHaveLength(1);
     expect(template).toContain("Schedule: rate(5 minutes)");
-    expect(template).not.toMatch(/Name:\s*occasionfun-co-uk/);
+    const schedule = template.slice(
+      template.indexOf("RetrySchedule:"),
+      template.indexOf("ContactHttpApi:"),
+    );
+    expect(schedule).not.toMatch(/^ +Name:/m);
   });
 
   it("sets the notification subject prefix without changing the sender", () => {

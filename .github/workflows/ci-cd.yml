@@ -82,6 +82,13 @@ jobs:
         working-directory: infra/contact-api
         run: sam validate --lint --template template.yaml
 
+      - name: Render production physical names
+        run: node scripts/render-contact-template.mjs --environment prod --output infra/contact-api/template.production.yaml
+
+      - name: SAM validate production names
+        working-directory: infra/contact-api
+        run: sam validate --lint --template template.production.yaml
+
       - name: Production static export
         run: npm run build
 
@@ -281,9 +288,12 @@ jobs:
       - name: Build contact API bundle
         run: npm run build --prefix infra/contact-api
 
+      - name: Render production physical names
+        run: node scripts/render-contact-template.mjs --environment prod --output infra/contact-api/template.production.yaml
+
       - name: SAM build
         working-directory: infra/contact-api
-        run: sam build --template template.yaml
+        run: sam build --template template.production.yaml
 
       - name: Write production parameters
         run: |

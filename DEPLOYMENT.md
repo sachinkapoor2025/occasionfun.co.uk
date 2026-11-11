@@ -88,7 +88,7 @@ The production stack is `occasionfun-co-uk-prod-contact`. Production does not us
 - `https://occasionfun.co.uk`
 - `https://www.occasionfun.co.uk`
 
-The production names are `occasionfun-co-uk-prod-contact`, `occasionfun-co-uk-prod-contact-retry`, and `occasionfun-co-uk-prod-leads`, with a new API Gateway and table. The change-set guard is the same as demo. Afterward the endpoint must be a different `eu-west-2` API, not `0e6zpkvbkj`.
+The production names are `occasionfun-co-uk-prod-contact`, `occasionfun-co-uk-prod-contact-retry`, and `occasionfun-co-uk-prod-leads`, with a new API Gateway and table. `template.yaml` keeps the existing demo names as literals, including `occasionfun-co-uk-contact-retry`. The production job renders those names into `template.production.yaml` before `sam build`. The demo job does not render that file. Neither template uses a condition for a table name, log group name, or Lambda function name, and the retry schedule does not set a rule name or `SourceAccount`. The change-set guard is the same as demo. Afterward the endpoint must be a different `eu-west-2` API, not `0e6zpkvbkj`.
 
 `describe-stacks` creates the production stack only when CloudFormation returns the ValidationError line `Stack with id occasionfun-co-uk-prod-contact does not exist` and the production workflow has already passed its environment and variable checks. Access denied, invalid credentials, network errors, throttling, and any other describe error stop the job. An existing stack is updated and is never deleted or recreated. Demo still refuses to create a missing stack.
 

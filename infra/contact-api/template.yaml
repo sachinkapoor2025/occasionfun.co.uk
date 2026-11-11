@@ -59,10 +59,7 @@ Resources:
   LeadsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !If
-        - IsProduction
-        - occasionfun-co-uk-prod-leads
-        - occasionfun-co-uk-leads
+      TableName: occasionfun-co-uk-leads
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: idempotencyKey
@@ -94,29 +91,20 @@ Resources:
   ContactLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !If
-        - IsProduction
-        - /aws/lambda/occasionfun-co-uk-prod-contact
-        - /aws/lambda/occasionfun-co-uk-contact
+      LogGroupName: /aws/lambda/occasionfun-co-uk-contact
       RetentionInDays: 30
 
   ContactRetryLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !If
-        - IsProduction
-        - /aws/lambda/occasionfun-co-uk-prod-contact-retry
-        - /aws/lambda/occasionfun-co-uk-contact-retry
+      LogGroupName: /aws/lambda/occasionfun-co-uk-contact-retry
       RetentionInDays: 30
 
   ContactFunction:
     Type: AWS::Serverless::Function
     DependsOn: ContactLogGroup
     Properties:
-      FunctionName: !If
-        - IsProduction
-        - occasionfun-co-uk-prod-contact
-        - occasionfun-co-uk-contact
+      FunctionName: occasionfun-co-uk-contact
       Handler: handler.handler
       CodeUri: dist/
       Description: Validates and stores OccasionFun.co.uk enquiries, then claims one SMTP send.
@@ -152,10 +140,7 @@ Resources:
     Type: AWS::Serverless::Function
     DependsOn: ContactRetryLogGroup
     Properties:
-      FunctionName: !If
-        - IsProduction
-        - occasionfun-co-uk-prod-contact-retry
-        - occasionfun-co-uk-contact-retry
+      FunctionName: occasionfun-co-uk-contact-retry
       Handler: handler.retryHandler
       CodeUri: dist/
       Timeout: 60

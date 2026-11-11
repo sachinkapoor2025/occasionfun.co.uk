@@ -455,6 +455,13 @@ describe("GitHub Actions workflows", () => {
     expect(production).toContain("secrets.AWS_PRODUCTION_SECRET_ACCESS_KEY");
     expect(production).not.toContain("secrets.AWS_ACCESS_KEY_ID");
     expect(production).not.toContain("secrets.AWS_SECRET_ACCESS_KEY");
+    expect(production).toContain(
+      "node scripts/render-contact-template.mjs --environment prod --output infra/contact-api/template.production.yaml",
+    );
+    expect(production).toContain("sam build --template template.production.yaml");
+    expect(production).not.toContain("sam build --template template.yaml");
+    expect(demo).toContain("sam build --template template.yaml");
+    expect(demo).not.toContain("template.production.yaml");
     expect(production).toContain("--stack-name occasionfun-co-uk-prod-contact");
     expect(production).toContain(PRODUCTION.table);
     expect(production).toContain(PRODUCTION.contactFunction);
