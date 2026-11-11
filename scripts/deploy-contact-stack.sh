@@ -28,6 +28,9 @@ EXPECTED_RETRY_LOG_GROUP=""
 EXPECTED_API_ID=""
 EXPECTED_ENDPOINT=""
 CHECK_ONLY="false"
+REQUESTED_ROLE_ARN=""
+ROLE_ARN=""
+DEMO_CLOUDFORMATION_ROLE_ARN="arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -42,6 +45,7 @@ while [ "$#" -gt 0 ]; do
     --expected-retry-log-group) EXPECTED_RETRY_LOG_GROUP="$2"; shift 2 ;;
     --expected-api-id) EXPECTED_API_ID="$2"; shift 2 ;;
     --expected-endpoint) EXPECTED_ENDPOINT="$2"; shift 2 ;;
+    --role-arn) REQUESTED_ROLE_ARN="$2"; shift 2 ;;
     --check-only) CHECK_ONLY="true"; shift ;;
     *)
       echo "Unknown argument: $1"
@@ -49,6 +53,25 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ "$ENVIRONMENT" = "demo" ]; then
+  if [ -n "$REQUESTED_ROLE_ARN" ] && [ "$REQUESTED_ROLE_ARN" != "$DEMO_CLOUDFORMATION_ROLE_ARN" ]; then
+    echo "Demo deployment rejected a different CloudFormation execution role."
+    echo "Expected: $DEMO_CLOUDFORMATION_ROLE_ARN"
+    exit 1
+  fi
+  ROLE_ARN="$DEMO_CLOUDFORMATION_ROLE_ARN"
+  echo "Demo change sets use CloudFormation role ${ROLE_ARN}."
+elif [ "$ENVIRONMENT" = "prod" ]; then
+  if [ "$REQUESTED_ROLE_ARN" = "$DEMO_CLOUDFORMATION_ROLE_ARN" ]; then
+    echo "Production cannot use the demo CloudFormation execution role."
+    exit 1
+  fi
+  if [ -n "$REQUESTED_ROLE_ARN" ]; then
+    echo "Production deployment does not pass a CloudFormation execution role."
+    exit 1
+  fi
+fi
 
 export AWS_REGION="eu-west-2"
 export AWS_DEFAULT_REGION="eu-west-2"
@@ -204,18 +227,24 @@ if [ ! -f "$template" ]; then
 fi
 
 log="$(mktemp)"
+sam_args=(
+  deploy
+  --template-file "$template"
+  --stack-name "$STACK_NAME"
+  --region "$AWS_REGION"
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
+  --resolve-s3
+  --s3-prefix "$ENVIRONMENT"
+  --no-execute-changeset
+  --no-confirm-changeset
+  --no-fail-on-empty-changeset
+  --parameter-overrides "file://${PARAMETERS_FILE}"
+)
+if [ "$ENVIRONMENT" = "demo" ]; then
+  sam_args+=(--role-arn "$DEMO_CLOUDFORMATION_ROLE_ARN")
+fi
 set +e
-sam deploy \
-  --template-file "$template" \
-  --stack-name "$STACK_NAME" \
-  --region "$AWS_REGION" \
-  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-  --resolve-s3 \
-  --s3-prefix "$ENVIRONMENT" \
-  --no-execute-changeset \
-  --no-confirm-changeset \
-  --no-fail-on-empty-changeset \
-  --parameter-overrides "file://${PARAMETERS_FILE}" \
+sam "${sam_args[@]}" \
   | tee "$log"
 deploy_status="${PIPESTATUS[0]}"
 set -e

@@ -42,7 +42,7 @@ Sequence:
 5. Configure those credentials for `eu-west-2` and require account `796174527529`.
 6. Install SAM CLI and Node.js 24, then install frontend and contact API dependencies.
 7. Build the contact API and run `sam build`.
-8. Create a CloudFormation change set for `occasionfun-co-uk-contact` with `sam deploy --no-execute-changeset`. The parameters are `Environment=demo`, the existing SMTP secret ARN, and the current demo origin list:
+8. Create a CloudFormation change set for `occasionfun-co-uk-contact` with `sam deploy --no-execute-changeset --role-arn arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. The script adds that role on every demo run, including when the caller omits `--role-arn`. A different role ARN is rejected before AWS is called. The parameters are `Environment=demo`, the existing SMTP secret ARN, and the current demo origin list:
    `https://occasionfun.co.uk`, `https://www.occasionfun.co.uk`, `https://d2oib89bmco9su.amplifyapp.com`, `https://demo.d2oib89bmco9su.amplifyapp.com`.
 9. Write the aggregated change set, including later pages, to a `.json` file and pass that path to `scripts/assert-safe-change-set.mjs`. The checker reads that file. It stops when the file is missing, unreadable, invalid JSON, or has no `Changes` array. An empty `Changes` array is refused. The job deletes the change set and stops when any resource would be added, removed, replaced, or conditionally replaced. That includes `LeadsTable`, `ContactFunction`, `ContactRetryFunction`, `ContactHttpApi`, `ContactLogGroup`, and `ContactRetryLogGroup`.
 10. Execute the change set only after that check, then wait for the stack update. SAM's `No changes to deploy` message is the only successful path that skips execution.
@@ -52,6 +52,8 @@ Sequence:
 14. After that deploy job succeeds, a separate smoke job checks the demo site. That job has no AWS credentials.
 
 The demo stack is not created when it is missing. The workflow does not create or update the SMTP secret. Lambda artifacts go to the SAM CLI managed bucket, and the job stops if that bucket is one of the website buckets.
+
+Every demo change set is created with execution role `arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. This repository does not create that role. After CloudFormation associates it with `occasionfun-co-uk-contact`, later updates of that stack keep using it. The production script path does not pass this role. A production run that supplies it stops before AWS is called. The stack name, API `0e6zpkvbkj`, table `occasionfun-co-uk-leads`, endpoint, SMTP secret, and existing physical names stay the same. Additions, removals, and replacements are still rejected before the change set is executed.
 
 ### Amplify auto-build
 
@@ -81,7 +83,7 @@ Backend deployment starts only when both of these are true:
 
 Those steps are not a substitute for configuring the environment. Create the environment and its reviewers before setting the variable. A missing environment does not approve a deployment: the reviewer check fails before AWS credentials are configured.
 
-The production stack is `occasionfun-co-uk-prod-contact`. Its parameters are `Environment=prod`, the same SMTP secret ARN, and only:
+The production stack is `occasionfun-co-uk-prod-contact`. Production does not use `occasionfun-cloudformation-demo`. Its parameters are `Environment=prod`, the same SMTP secret ARN, and only:
 
 - `https://occasionfun.co.uk`
 - `https://www.occasionfun.co.uk`
@@ -133,6 +135,7 @@ Region for every AWS step: `eu-west-2`.
 | | Demo | Production |
 | --- | --- | --- |
 | Stack | `occasionfun-co-uk-contact` | `occasionfun-co-uk-prod-contact` |
+| CloudFormation role | `occasionfun-cloudformation-demo` | Not this role |
 | API | `0e6zpkvbkj` | A new API created by the production stack |
 | Contact Lambda | `occasionfun-co-uk-contact` | `occasionfun-co-uk-prod-contact` |
 | Retry Lambda | `occasionfun-co-uk-contact-retry` | `occasionfun-co-uk-prod-contact-retry` |

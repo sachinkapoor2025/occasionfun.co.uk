@@ -778,3 +778,197 @@ describe("deployment script configuration check", () => {
     expect(result.stdout).toContain("No change set was created.");
   });
 });
+
+const DEMO_CLOUDFORMATION_ROLE_ARN =
+  "arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo";
+
+function runConfigCheck(
+  environment: "demo" | "prod",
+  extraArgs: string[] = [],
+): { status: number | null; stdout: string; stderr: string } {
+  const target = environment === "demo" ? DEMO : PRODUCTION;
+  const directory = mkdtempSync(path.join(tmpdir(), "occasionfun-deploy-"));
+  const parameters = path.join(directory, "parameters.yaml");
+  writeFileSync(
+    parameters,
+    [
+      `Environment: ${target.environment}`,
+      `SmtpSecretArn: ${SMTP_SECRET_ARN}`,
+      `AllowedOrigins: "${originsValue(target.origins)}"`,
+      "",
+    ].join("\n"),
+  );
+  const bash =
+    process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash";
+  const args = [
+    "scripts/deploy-contact-stack.sh",
+    "--check-only",
+    "--environment",
+    environment,
+    "--stack-name",
+    target.stackName,
+    "--parameters-file",
+    parameters,
+    "--allow-create",
+    String(target.allowCreate),
+    "--expected-table",
+    target.table,
+    "--expected-contact-function",
+    target.contactFunction,
+    "--expected-retry-function",
+    target.retryFunction,
+    "--expected-contact-log-group",
+    target.contactLogGroup,
+    "--expected-retry-log-group",
+    target.retryLogGroup,
+    ...extraArgs,
+  ];
+  if (environment === "demo") {
+    args.push("--expected-api-id", DEMO.apiId, "--expected-endpoint", DEMO.endpoint);
+  }
+  const result = spawnSync(bash, args, {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      MSYS_NO_PATHCONV: "1",
+      MSYS2_ARG_CONV_EXCL: "*",
+    },
+  });
+  rmSync(directory, { recursive: true, force: true });
+  return {
+    status: result.status,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  };
+}
+
+describe("CloudFormation execution role", () => {
+  const deployScript = readFileSync(path.join(root, "scripts/deploy-contact-stack.sh"), "utf8");
+  const samDeploy = deployScript.slice(
+    deployScript.indexOf("sam_args=("),
+    deployScript.indexOf('deploy_status="${PIPESTATUS[0]}"'),
+  );
+
+  it("passes the demo execution role to every demo SAM change set", () => {
+    expect(DEMO.stackName).toBe("occasionfun-co-uk-contact");
+    expect(DEMO.apiId).toBe("0e6zpkvbkj");
+    expect(DEMO.table).toBe("occasionfun-co-uk-leads");
+    expect(DEMO.endpoint).toBe(
+      "https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact",
+    );
+    expect(deployScript).toContain(
+      `DEMO_CLOUDFORMATION_ROLE_ARN="${DEMO_CLOUDFORMATION_ROLE_ARN}"`,
+    );
+    expect(samDeploy).toContain('--stack-name "$STACK_NAME"');
+    expect(samDeploy).toContain('if [ "$ENVIRONMENT" = "demo" ]; then');
+    expect(samDeploy).toContain('--role-arn "$DEMO_CLOUDFORMATION_ROLE_ARN"');
+    expect(samDeploy.indexOf('if [ "$ENVIRONMENT" = "demo" ]; then')).toBeLessThan(
+      samDeploy.indexOf('--role-arn "$DEMO_CLOUDFORMATION_ROLE_ARN"'),
+    );
+    expect(workflow("deploy-demo.yml")).toContain("--stack-name occasionfun-co-uk-contact");
+    expect(workflow("deploy-demo.yml")).toContain(DEMO.apiId);
+    expect(workflow("deploy-demo.yml")).toContain(DEMO.table);
+    expect(workflow("deploy-demo.yml")).toContain(SMTP_SECRET_ARN);
+
+    const omitted = runConfigCheck("demo");
+    expect(omitted.status, omitted.stderr || omitted.stdout).toBe(0);
+    expect(omitted.stdout).toContain(
+      `Demo change sets use CloudFormation role ${DEMO_CLOUDFORMATION_ROLE_ARN}.`,
+    );
+    expect(omitted.stdout).toContain("No change set was created.");
+
+    const explicit = runConfigCheck("demo", ["--role-arn", DEMO_CLOUDFORMATION_ROLE_ARN]);
+    expect(explicit.status, explicit.stderr || explicit.stdout).toBe(0);
+    expect(explicit.stdout).toContain(DEMO_CLOUDFORMATION_ROLE_ARN);
+    expect(explicit.stdout).toContain("No change set was created.");
+  });
+
+  it("rejects a different CloudFormation role before calling AWS", () => {
+    const result = runConfigCheck("demo", [
+      "--role-arn",
+      "arn:aws:iam::796174527529:role/occasionfun-cloudformation-other",
+    ]);
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(
+      /rejected a different CloudFormation execution role/,
+    );
+    expect(`${result.stdout}\n${result.stderr}`).toContain(DEMO_CLOUDFORMATION_ROLE_ARN);
+    expect(result.stdout).not.toContain("No change set was created.");
+    expect(result.stdout).not.toContain("get-caller-identity");
+  });
+
+  it("keeps the demo stack name and the existing change-set checks", () => {
+    expect(DEMO.stackName).toBe("occasionfun-co-uk-contact");
+    expect(deployScript).toContain('--stack-name "$STACK_NAME"');
+    expect(deployScript).not.toContain("delete-stack");
+    expect(deployScript.indexOf("assert-safe-change-set.mjs")).toBeLessThan(
+      deployScript.indexOf("execute-change-set"),
+    );
+    const unsafe = findUnsafeChanges(
+      [
+        {
+          ResourceChange: {
+            Action: "Add",
+            LogicalResourceId: "ContactFunction",
+            Replacement: "False",
+          },
+        },
+        {
+          ResourceChange: {
+            Action: "Remove",
+            LogicalResourceId: "LeadsTable",
+            Replacement: "False",
+          },
+        },
+        {
+          ResourceChange: {
+            Action: "Modify",
+            LogicalResourceId: "ContactHttpApi",
+            Replacement: "True",
+          },
+        },
+      ],
+      { mode: "update" },
+    );
+    expect(unsafe.map((finding) => finding.logicalId)).toEqual([
+      "ContactFunction",
+      "LeadsTable",
+      "ContactHttpApi",
+    ]);
+    expect(
+      findUnsafeChanges(
+        [
+          {
+            ResourceChange: {
+              Action: "Modify",
+              LogicalResourceId: "ContactFunction",
+              Replacement: "False",
+            },
+          },
+        ],
+        { mode: "update" },
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not let production use the demo execution role", () => {
+    expect(workflow("deploy-production.yml")).not.toContain("occasionfun-cloudformation-demo");
+    expect(workflow("deploy-production.yml")).toContain(
+      "--stack-name occasionfun-co-uk-prod-contact",
+    );
+    expect(samDeploy).not.toContain("--role-arn \"$ROLE_ARN\"");
+    const result = runConfigCheck("prod", ["--role-arn", DEMO_CLOUDFORMATION_ROLE_ARN]);
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(
+      /Production cannot use the demo CloudFormation execution role/,
+    );
+    expect(result.stdout).not.toContain("Demo change sets use CloudFormation role");
+    expect(result.stdout).not.toContain("No change set was created.");
+
+    const withoutRole = runConfigCheck("prod");
+    expect(withoutRole.status, withoutRole.stderr || withoutRole.stdout).toBe(0);
+    expect(withoutRole.stdout).not.toContain(DEMO_CLOUDFORMATION_ROLE_ARN);
+    expect(withoutRole.stdout).toContain("No change set was created.");
+  });
+});
