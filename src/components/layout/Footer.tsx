@@ -1,21 +1,31 @@
 import Link from "next/link";
 import { company, displayOrPending } from "@/config/company";
-import { footerNav, legalNav } from "@/config/navigation";
+import { companyNav, footerExplore, legalNav } from "@/config/navigation";
 import { Container } from "@/components/ui/Container";
 
 export function Footer() {
   return (
     <footer className="mt-auto border-t border-slate-200 bg-navy-950 text-slate-200">
       <Container className="py-14">
-        <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr]">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <p className="text-lg font-semibold tracking-wide text-white">
-              {company.legalName}
-            </p>
+            <Link href="/" className="inline-flex rounded-md bg-white px-3 py-2">
+              <span className="brand-lockup">
+                <img
+                  src="/brand/occasionfun-logo.png"
+                  alt="OccasionFun Ltd"
+                  width={903}
+                  height={198}
+                  className="brand-lockup-logo"
+                />
+                <span className="brand-tagline">UK technology services</span>
+              </span>
+            </Link>
             <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-300">
-              UK-registered technology services company. Specialist engineering
-              delivery may be supported by technology partner {company.dgvDisplayName}{" "}
-              where appropriate and permitted.
+              UK-registered company for technology project opportunities,
+              bidding and project coordination. Technical delivery is provided
+              by DGV Group, a separate India-registered company under common
+              ownership.
             </p>
             <dl className="mt-6 space-y-2 text-sm">
               <div>
@@ -54,10 +64,28 @@ export function Footer() {
 
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-white">
-              Explore
+              Site
             </p>
             <ul className="mt-4 space-y-2">
-              {footerNav.map((item) => (
+              {footerExplore.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="text-sm text-slate-300 hover:text-white"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-white">
+              Company
+            </p>
+            <ul className="mt-4 space-y-2">
+              {companyNav.map((item) => (
                 <li key={item.href}>
                   <Link
                     href={item.href}

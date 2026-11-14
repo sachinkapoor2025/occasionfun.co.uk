@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { CTABanner } from "@/components/ui/CTABanner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { SupplierInfoPanel } from "@/components/ui/SupplierInfoPanel";
 import { company, displayOrPending } from "@/config/company";
-import { services } from "@/content/services";
+import { getServiceBySlug, serviceGroups } from "@/content/services";
 import { createPageMetadata } from "@/lib/seo";
 
 export const metadata = createPageMetadata({
@@ -54,44 +55,81 @@ export default function PublicSectorPage() {
 
       <Section
         title="Service categories mapped to common IT needs"
-        description="A concise view of how our capabilities relate to typical technology procurements."
+        description="Names only, in the same groups as the services catalogue. The scope of each one is explained on its own page."
       >
         <ul className="grid gap-3 sm:grid-cols-2">
-          {services.map((service) => (
-            <li
-              key={service.slug}
-              className="border-l-2 border-accent/40 pl-4 text-sm text-slate-700"
-            >
-              <span className="font-semibold text-navy-900">{service.title}</span>
-              <span className="block mt-1 text-slate-600">{service.summary}</span>
-            </li>
-          ))}
+          {serviceGroups.flatMap((group) =>
+            group.slugs.flatMap((slug) => {
+              const service = getServiceBySlug(slug);
+              if (!service) return [];
+              return [
+                <li
+                  key={service.slug}
+                  className="border-l-2 border-accent/40 pl-4 text-sm text-slate-700"
+                >
+                  <Link
+                    href={`/services/${service.slug}`}
+                    className="font-semibold text-navy-900 hover:text-accent"
+                  >
+                    {service.title}
+                  </Link>
+                  <span className="mt-1 block text-slate-600">
+                    {service.cardText}
+                  </span>
+                </li>,
+              ];
+            }),
+          )}
         </ul>
+        <p className="mt-6 text-sm text-slate-600">
+          The grouped catalogue is on the{" "}
+          <Link
+            href="/services"
+            className="font-semibold text-accent hover:text-accent-hover"
+          >
+            services
+          </Link>{" "}
+          page.
+        </p>
       </Section>
 
       <Section
         tone="muted"
-        title="Delivery model and subcontracting transparency"
+        title="Who bids, and who delivers"
+        description="The same two-company model applies to a public-sector or prime-contractor opportunity. It is explained for the requirement in front of the buyer. No framework approval, contract history or certification is claimed here."
       >
         <div className="grid gap-6 lg:grid-cols-2">
           <article>
-            <h3 className="text-xl text-navy-900">Supplier-facing company</h3>
+            <h3 className="text-xl text-navy-900">OccasionFun Ltd</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              {company.legalName} is the contracting-facing supplier.
-              Technology partner {company.dgvDisplayName} may provide
-              specialist engineering delivery where disclosed and permitted.
+              The UK-registered company that identifies the opportunity, takes
+              part in the bid and coordinates the engagement. Company number{" "}
+              {company.companyNumber}.
             </p>
           </article>
           <article>
-            <h3 className="text-xl text-navy-900">What we disclose</h3>
+            <h3 className="text-xl text-navy-900">DGV Group</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              Subcontractors, delivery locations, access to systems and data,
-              and responsibilities are disclosed in line with tender and
-              contract requirements. Overseas delivery or access is never
-              assumed to be automatically acceptable.
+              A separate India-registered company under common ownership. DGV
+              Group provides technical planning, architecture, development,
+              design, testing and implementation. It is not an unrelated
+              supplier and not the same legal entity as OccasionFun.
             </p>
           </article>
         </div>
+        <p className="mt-6 max-w-3xl text-sm leading-relaxed text-slate-600">
+          Where a tender asks about delivery location, access to systems or
+          data, or the role of DGV Group, that is answered for the specific
+          requirement. Access from outside the UK is not assumed to be
+          acceptable.           See the{" "}
+          <Link
+            href="/technology-partner"
+            className="font-semibold text-accent hover:text-accent-hover"
+          >
+            technology partner
+          </Link>{" "}
+          page for the responsibilities of each company.
+        </p>
       </Section>
 
       <Section title="UK engagement">

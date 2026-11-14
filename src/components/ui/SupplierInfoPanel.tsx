@@ -33,13 +33,14 @@ export function SupplierInfoPanel() {
     },
     { label: "Main service categories", value: serviceCategories },
     {
-      label: "Technology partner",
-      value: `${company.dgvDisplayName} (full legal entity details to be verified)`,
+      label: "Technical delivery",
+      value:
+        "DGV Group, a separate India-registered company under common ownership. Its full legal name, company number and registered address are not published on this website.",
     },
     {
-      label: "Subcontracting",
+      label: "Delivery arrangement",
       value:
-        "Project-specific and disclosed in accordance with tender and contract terms",
+        "OccasionFun coordinates the engagement. DGV Group carries out the technical work. The arrangement is explained for the specific requirement.",
     },
   ];
 

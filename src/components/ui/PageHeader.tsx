@@ -10,16 +10,8 @@ export function PageHeader({
   description: string;
 }) {
   return (
-    <header className="relative overflow-hidden border-b border-slate-200/80 bg-white/60">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 surface-grid opacity-60"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-accent/10 blur-3xl"
-      />
-      <Container className="relative py-14 sm:py-18">
+    <header className="border-b border-slate-200/80 bg-role-secondary">
+      <Container className="py-10 sm:py-12">
         {eyebrow ? (
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-accent animate-fade-in">
             {eyebrow}

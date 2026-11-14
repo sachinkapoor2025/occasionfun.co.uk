@@ -1,10 +1,14 @@
+import { ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ButtonLink } from "@/components/ui/Button";
 import { CTABanner } from "@/components/ui/CTABanner";
+import { Container } from "@/components/ui/Container";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import {
   getAllServiceSlugs,
+  getRelatedServices,
   getServiceBySlug,
 } from "@/content/services";
 import { createPageMetadata } from "@/lib/seo";
@@ -26,7 +30,7 @@ export async function generateMetadata({ params }: ServicePageProps) {
 
   return createPageMetadata({
     title: service.title,
-    description: service.summary,
+    description: service.introduction,
     path: `/services/${service.slug}`,
   });
 }
@@ -39,15 +43,39 @@ export default async function ServiceDetailPage({ params }: ServicePageProps) {
     notFound();
   }
 
+  const related = getRelatedServices(service);
+
   return (
     <>
+      <nav
+        aria-label="Breadcrumb"
+        className="border-b border-slate-200/80 bg-role-primary"
+      >
+        <Container className="py-3">
+          <ol className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+            <li>
+              <Link
+                href="/services"
+                className="font-semibold text-accent hover:text-accent-hover"
+              >
+                Services
+              </Link>
+            </li>
+            <li aria-hidden="true">/</li>
+            <li aria-current="page" className="text-navy-900">
+              {service.title}
+            </li>
+          </ol>
+        </Container>
+      </nav>
+
       <PageHeader
         eyebrow="Service"
         title={service.title}
-        description={service.summary}
+        description={service.introduction}
       />
 
-      <Section title="What this service covers">
+      <Section title="What you can engage us to do">
         <ul className="grid gap-3 sm:grid-cols-2">
           {service.covers.map((item) => (
             <li
@@ -62,7 +90,7 @@ export default async function ServiceDetailPage({ params }: ServicePageProps) {
 
       <Section
         tone="muted"
-        title="Typical client challenges"
+        title="Situations this is relevant to"
         description="Common situations where this capability is relevant. These are general examples, not claims about specific clients."
       >
         <ul className="grid gap-4 sm:grid-cols-2">
@@ -78,7 +106,7 @@ export default async function ServiceDetailPage({ params }: ServicePageProps) {
       </Section>
 
       <Section
-        title="Example deliverables"
+        title="Examples of what a scoped piece of work can include"
         description="Illustrative outputs only. They are not presented as completed client work."
       >
         <ul className="space-y-3">
@@ -87,16 +115,18 @@ export default async function ServiceDetailPage({ params }: ServicePageProps) {
               key={item}
               className="flex gap-3 text-sm leading-relaxed text-slate-700"
             >
-              <span aria-hidden="true" className="mt-1 text-accent">
-                ▸
-              </span>
+              <ChevronRight
+                aria-hidden="true"
+                className="mt-0.5 h-4 w-4 shrink-0 text-accent"
+                strokeWidth={1.75}
+              />
               <span>{item}</span>
             </li>
           ))}
         </ul>
       </Section>
 
-      <Section title="Engagement approach">
+      <Section tone="muted" title="How a requirement is taken forward">
         <p className="max-w-3xl text-base leading-relaxed text-slate-600">
           {service.engagement}
         </p>
@@ -107,20 +137,43 @@ export default async function ServiceDetailPage({ params }: ServicePageProps) {
         </div>
       </Section>
 
-      <Section
-        tone="muted"
-        title="Security, data and acceptance considerations"
-      >
+      <Section title="Boundaries and safeguards">
         <p className="max-w-3xl text-base leading-relaxed text-slate-600">
           {service.securityNotes}
         </p>
       </Section>
 
+      <Section
+        tone="muted"
+        title="Related services"
+        description="Nearby services are separate pages. The note under each name says how it differs."
+      >
+        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {related.map((item) => (
+            <li key={item.slug} className="border-t border-slate-200 pt-5">
+              <h3 className="text-xl text-navy-900">
+                <Link
+                  href={`/services/${item.slug}`}
+                  className="transition-colors hover:text-accent"
+                >
+                  {item.title}
+                </Link>
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                {item.distinction}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
       <CTABanner
-        title={`Discuss ${service.shortTitle.toLowerCase()} requirements`}
+        title={`Discuss ${service.title}`}
         description="Share your objectives, constraints and timelines. We will respond through our UK business engagement route."
         primaryHref="/contact"
         primaryLabel="Discuss a requirement"
+        secondaryHref="/services"
+        secondaryLabel="Explore our services"
       />
     </>
   );

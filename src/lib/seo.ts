@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { company } from "@/config/company";
 
 const defaultDescription =
-  "OCCASIONFUN LTD is a UK-registered technology services company offering software, cloud, data, quality engineering and digital solutions, with specialist delivery support through technology partner DGV where appropriate.";
+  "OccasionFun Ltd is a UK-registered company that identifies technology project opportunities, leads bidding and coordinates delivery. Technical work is carried out by DGV Group, a separate India-registered company under common ownership.";
 
 export function createPageMetadata({
   title,

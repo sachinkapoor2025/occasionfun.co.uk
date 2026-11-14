@@ -1,8 +1,8 @@
+import { Briefcase, FileText, Landmark } from "lucide-react";
 import { Suspense } from "react";
 import { ContactForm } from "@/components/forms/ContactForm";
 import { Container } from "@/components/ui/Container";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { company, displayOrPending } from "@/config/company";
+import { company } from "@/config/company";
 import { createPageMetadata } from "@/lib/seo";
 
 export const metadata = createPageMetadata({
@@ -12,10 +12,16 @@ export const metadata = createPageMetadata({
   path: "/contact",
 });
 
+const enquiryTopics = [
+  { title: "Project requirements", icon: Briefcase },
+  { title: "Procurement opportunities", icon: Landmark },
+  { title: "Supplier information", icon: FileText },
+] as const;
+
 function ContactFormFallback() {
   return (
     <div
-      className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 text-sm text-slate-600"
+      className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 sm:p-8"
       role="status"
     >
       Loading contact form…
@@ -25,69 +31,54 @@ function ContactFormFallback() {
 
 export default function ContactPage() {
   return (
-    <>
-      <PageHeader
-        eyebrow="Contact"
-        title="Discuss a requirement or request supplier information"
-        description="Tell us about your organisation and enquiry. We validate submissions server-side and protect the form against basic spam."
-      />
+    <section className="bg-role-secondary py-8 sm:py-10">
+      <Container className="grid gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-start">
+        <div className="order-1 lg:order-0 lg:col-start-1 lg:row-start-1">
+          <h1 className="text-balance text-3xl text-navy-900 sm:text-4xl">
+            Let&apos;s discuss your project.
+          </h1>
+          <p className="mt-4 text-base leading-relaxed text-slate-600">
+            Tell us about a technology requirement, procurement opportunity or
+            supplier enquiry. OccasionFun Ltd receives the enquiry and
+            coordinates the engagement.
+          </p>
+          <ul className="mt-6 space-y-3">
+            {enquiryTopics.map(({ title, icon: Icon }) => (
+              <li key={title} className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+                  <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                </span>
+                <span className="text-sm font-semibold text-navy-900">{title}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-      <section className="py-16 sm:py-20">
-        <Container className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr]">
-          <aside className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6">
-              <h2 className="text-xl text-navy-900">Company identity</h2>
-              <dl className="mt-4 space-y-3 text-sm">
-                <div>
-                  <dt className="font-semibold text-navy-900">Legal name</dt>
-                  <dd className="text-slate-600">{company.legalName}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-navy-900">Company number</dt>
-                  <dd className="text-slate-600">{company.companyNumber}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-navy-900">Registered office</dt>
-                  <dd className="text-slate-600">
-                    {displayOrPending(
-                      company.registeredOffice,
-                      "Pending verification",
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-navy-900">General email</dt>
-                  <dd className="text-slate-600">
-                    {displayOrPending(
-                      company.businessEmail,
-                      "Pending approval",
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-navy-900">Telephone</dt>
-                  <dd className="text-slate-600">
-                    {displayOrPending(
-                      company.businessPhone,
-                      "Pending approval",
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-            <p className="text-sm leading-relaxed text-slate-600">
-              Private personal email addresses and phone numbers are not
-              published without approval. Enquiries submitted through this form
-              are reviewed through the company&apos;s business mailbox once
-              notification delivery is configured.
-            </p>
-          </aside>
-
+        <div className="order-2 lg:order-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <Suspense fallback={<ContactFormFallback />}>
             <ContactForm />
           </Suspense>
-        </Container>
-      </section>
-    </>
+        </div>
+
+        <aside className="order-3 lg:order-0 lg:col-start-1 lg:row-start-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 className="text-lg text-navy-900">Company</h2>
+            <p className="mt-3 text-sm font-semibold text-navy-900">
+              {company.legalName}
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Company number {company.companyNumber}
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              Office address, email and telephone are not published on this
+              page.
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              No response time is published.
+            </p>
+          </div>
+        </aside>
+      </Container>
+    </section>
   );
 }

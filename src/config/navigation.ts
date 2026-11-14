@@ -1,22 +1,27 @@
+export const companyNav = [
+  { href: "/about", label: "About OccasionFun" },
+  { href: "/technology-partner", label: "Technology Partner — DGV Group" },
+  { href: "/how-we-work", label: "How We Work" },
+] as const;
+
 export const mainNav = [
   { href: "/", label: "Home" },
-  { href: "/about", label: "About" },
   { href: "/services", label: "Services" },
+  { href: "/our-work", label: "Our Work" },
   { href: "/public-sector", label: "Public Sector" },
-  { href: "/technology-partner", label: "Technology Partner" },
-  { href: "/how-we-work", label: "How We Work" },
   { href: "/trust", label: "Trust" },
   { href: "/contact", label: "Contact" },
 ] as const;
 
-export const footerNav = [
-  { href: "/about", label: "About" },
+/** Pages that sit directly in the header, in order, with Company inserted after Our Work. */
+export const mainNavBeforeCompany = mainNav.slice(0, 3);
+export const mainNavAfterCompany = mainNav.slice(3);
+
+export const footerExplore = [
   { href: "/services", label: "Services" },
+  { href: "/our-work", label: "Our Work" },
   { href: "/public-sector", label: "Public Sector" },
-  { href: "/technology-partner", label: "Technology Partner" },
-  { href: "/how-we-work", label: "How We Work" },
   { href: "/trust", label: "Trust" },
-  { href: "/policies", label: "Policies" },
   { href: "/contact", label: "Contact" },
 ] as const;
 

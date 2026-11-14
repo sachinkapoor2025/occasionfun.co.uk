@@ -37,11 +37,11 @@ export const positioning = {
   tagline:
     "Practical technology services for organisations that need dependable delivery.",
   supportingMessage:
-    "A UK-registered technology services company providing software, cloud, data, quality engineering and digital solutions. We combine UK-based business engagement with specialist engineering delivery through our technology partner, DGV, where appropriate to the project and subject to client requirements.",
+    "OccasionFun Ltd is a UK-registered company that identifies technology project opportunities, takes part in bidding and proposals, and coordinates delivery. Technical work is carried out by DGV Group, a separate India-registered company under common ownership.",
   homepageHeadline:
-    "Technology services built around clear delivery and accountable partnerships.",
+    "IT services and technology projects, coordinated from the UK.",
   homepageSubheading:
-    "OCCASIONFUN LTD helps organisations plan, build, improve and support digital services across cloud, software, data, quality engineering and web platforms—with UK-based business engagement and specialist technology delivery through our partner network.",
+    "OccasionFun Ltd identifies project opportunities, leads bidding and business engagement, and coordinates delivery. The technical work is carried out by DGV Group, a separate India-registered company under common ownership.",
 } as const;
 
 export const enquiryTypes = [
