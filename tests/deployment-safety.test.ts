@@ -406,6 +406,7 @@ describe("GitHub Actions workflows", () => {
     expect(validate).toContain("name: contact-demo-template");
     expect(validate).toContain("name: contact-production-template");
     expect(validate).toContain("sam validate --lint --template demo-retry-permission.yaml");
+    expect(validate).toContain("sam validate --lint --template prod-retry-permission.yaml");
     expect(validate).not.toContain("change-set-type IMPORT");
     expect(validate).toContain("npm run build");
     expect(validate).toContain("node-version: \"24\"");
@@ -518,9 +519,18 @@ describe("GitHub Actions workflows", () => {
     expect(demo).not.toContain("render-contact-template.mjs");
     expect(demo).not.toContain("template.production.yaml");
     expect(demo).not.toContain("contact-production-template");
+    expect(demo).toContain("Demo deployment package declares the retained retry permission.");
     expect(demo).not.toContain("demo-retry-permission.yaml");
+    expect(demo).not.toContain("prod-retry-permission.yaml");
     expect(demo).not.toContain("change-set-type IMPORT");
+    expect(production).toContain("Production deployment package declares the retained retry permission.");
+    expect(production).not.toContain("prod-retry-permission.yaml");
+    expect(production).not.toContain("demo-retry-permission.yaml");
+    expect(production).not.toContain("change-set-type IMPORT");
+    expect(production).not.toContain("occasionfun-co-uk-prod-contact-retry-permission");
+    expect(production).not.toContain("occasionfun-co-uk-contact-retry-permission");
     expect(pipeline).not.toContain("import-existing-retry-permission");
+    expect(pipeline).not.toContain("import-existing-prod-retry-permission");
     expect(production).toContain("--stack-name occasionfun-co-uk-prod-contact");
     expect(production).toContain(PRODUCTION.table);
     expect(production).toContain(PRODUCTION.contactFunction);

@@ -99,6 +99,10 @@ jobs:
         working-directory: infra/contact-api
         run: sam validate --lint --template demo-retry-permission.yaml
 
+      - name: SAM validate retained production permission template
+        working-directory: infra/contact-api
+        run: sam validate --lint --template prod-retry-permission.yaml
+
       - name: Render production physical names
         run: >-
           node scripts/render-contact-template.mjs
@@ -355,6 +359,16 @@ jobs:
       - name: SAM build
         working-directory: infra/contact-api
         run: sam build --template template.production.yaml
+
+      - name: Confirm the production package has no retained permission
+        working-directory: infra/contact-api
+        run: |
+          test -f template.production.yaml
+          test -f .aws-sam/build/template.yaml
+          if grep -q "ContactRetryFunctionRetrySchedulePermission:" .aws-sam/build/template.yaml; then
+            echo "Production deployment package declares the retained retry permission."
+            exit 1
+          fi
 
       - name: Write production parameters
         run: |

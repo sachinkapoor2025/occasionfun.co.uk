@@ -16,14 +16,7 @@ const PHYSICAL_NAMES = [
   { property: "FunctionName", key: "retryFunction" },
 ];
 
-const PRODUCTION_RETRY_PERMISSION = `  ContactRetryFunctionRetrySchedulePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref ContactRetryFunction
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn
-`;
+const PRODUCTION_RETRY_RULE_NAME = "occasionfun-co-uk-prod-contact-retry";
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -82,19 +75,32 @@ export function retrySchedulePermission(template) {
   };
 }
 
-function insertProductionPermission(template) {
-  if (/^ {2}ContactRetryFunctionRetrySchedulePermission:/m.test(template)) {
-    throw new Error("The demo template must not declare the retry permission.");
+function declaresRetryPermission(template) {
+  return /^ {2}ContactRetryFunctionRetrySchedulePermission:/m.test(template);
+}
+
+function nameProductionRetryRule(template) {
+  const name = PRODUCTION_RETRY_RULE_NAME;
+  if (name.length > 64 || !name.startsWith("occasionfun-co-uk-prod-contact-")) {
+    throw new Error("Production retry rule name is outside the execution role permission.");
   }
-  const marker = "  ContactHttpApi:";
-  const index = template.indexOf(marker);
-  if (index === -1) throw new Error("ContactHttpApi was not found.");
-  const block = PRODUCTION_RETRY_PERMISSION.replaceAll("\n", lineEnding(template));
-  return template.slice(0, index) + block + template.slice(index);
+  const ending = lineEnding(template);
+  const needle = `ContactRetryFunctionRetrySchedule:${ending}    Type: AWS::Events::Rule${ending}    Properties:${ending}`;
+  if (!template.includes(needle)) {
+    throw new Error("Production retry rule properties were not found.");
+  }
+  const rule = resourceBlock(template, "ContactRetryFunctionRetrySchedule");
+  if (/^ +Name:/m.test(rule)) {
+    throw new Error("The source retry rule must not set Name.");
+  }
+  return template.replace(needle, `${needle}      Name: ${name}${ending}`);
 }
 
 export function renderContactTemplate(template, environment) {
   const target = targetForEnvironment(environment);
+  if (declaresRetryPermission(template)) {
+    throw new Error("The application template must not declare the retry permission.");
+  }
   if (/^ +(TableName|LogGroupName|FunctionName):\s*[!{]/m.test(template)) {
     throw new Error(
       "Physical names must be literals. A conditional name can replace an existing demo resource.",
@@ -113,14 +119,7 @@ export function renderContactTemplate(template, environment) {
       }
       rendered = rendered.replace(pattern, `$1${target[key]}`);
     }
-    rendered = insertProductionPermission(rendered);
-    const permission = resourceBlock(rendered, "ContactRetryFunctionRetrySchedulePermission");
-    if (!permission.includes("FunctionName: !Ref ContactRetryFunction")) {
-      throw new Error("Production retry permission must reference its own function.");
-    }
-    if (!permission.includes("SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn")) {
-      throw new Error("Production retry permission must reference its own rule.");
-    }
+    rendered = nameProductionRetryRule(rendered);
     if (rendered.includes("GHXjmJNlS8ce") || rendered.includes(`function:${DEMO.retryFunction}`)) {
       throw new Error("Production template still targets the demo retry function or rule.");
     }
@@ -129,6 +128,9 @@ export function renderContactTemplate(template, environment) {
     if (demoPermission.requiresReplacement) {
       throw new Error(`Demo retry schedule is not safe: ${demoPermission.risks.join("; ")}`);
     }
+  }
+  if (declaresRetryPermission(rendered)) {
+    throw new Error("The application template must not declare the retry permission.");
   }
   for (const { property, key } of PHYSICAL_NAMES) {
     if (!propertyLine(property, target[key]).test(rendered)) {

@@ -24,6 +24,7 @@ const prodNames = {
   table: "occasionfun-co-uk-prod-leads",
   contactFunction: "occasionfun-co-uk-prod-contact",
   retryFunction: "occasionfun-co-uk-prod-contact-retry",
+  retryRuleName: "occasionfun-co-uk-prod-contact-retry",
   contactLogGroup: "/aws/lambda/occasionfun-co-uk-prod-contact",
   retryLogGroup: "/aws/lambda/occasionfun-co-uk-prod-contact-retry",
   subjectPrefix: "[PROD]",
@@ -90,6 +91,8 @@ describe("contact API environments", () => {
     );
     expect(retrySchedulePermission(restored).declaresPermission).toBe(true);
     expect(retrySchedulePermission(restored).requiresReplacement).toBe(true);
+    expect(() => renderContactTemplate(restored, "demo")).toThrow(/retry permission/);
+    expect(() => renderContactTemplate(restored, "prod")).toThrow(/retry permission/);
   });
 
   it("gives the future production stack its own literal names", () => {
@@ -106,14 +109,18 @@ describe("contact API environments", () => {
     expect(production).not.toContain("SourceAccount");
     expect(production).not.toContain("GHXjmJNlS8ce");
     expect(production).not.toMatch(/Type:\s*Schedule\b/);
-    expect(production).toContain("Type: AWS::Lambda::Permission");
-    expect(production).toContain("FunctionName: !Ref ContactRetryFunction");
-    expect(production).toContain("SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn");
+    expect(production).not.toContain("ContactRetryFunctionRetrySchedulePermission:");
+    expect(production).not.toContain("Type: AWS::Lambda::Permission");
+    expect(production).toContain(`Name: ${prodNames.retryRuleName}`);
+    expect(prodNames.retryRuleName.length).toBeLessThanOrEqual(64);
+    expect(prodNames.retryRuleName.startsWith("occasionfun-co-uk-prod-contact-")).toBe(true);
     expect(production).toContain("FunctionName: occasionfun-co-uk-prod-contact-retry");
     expect(production).not.toContain("FunctionName: occasionfun-co-uk-contact-retry");
     expect(production).not.toContain("arn:aws:lambda:");
     expect(production).not.toContain("arn:aws:events:");
-    expect(renderContactTemplate(template, "demo")).toBe(template);
+    const demo = renderContactTemplate(template, "demo");
+    expect(demo).toBe(template);
+    expect(demo).not.toContain("ContactRetryFunctionRetrySchedulePermission:");
   });
 
   it("points both functions at the table created by the same stack", () => {
@@ -196,6 +203,25 @@ describe("contact API environments", () => {
       "arn:aws:events:eu-west-2:796174527529:rule/occasionfun-co-uk-contact-ContactRetryFunctionRetry-GHXjmJNlS8ce",
     );
     expect(permissionStack).not.toContain("occasionfun-co-uk-prod-");
+    expect(permissionStack).not.toContain("SourceAccount");
+    expect(permissionStack).not.toContain("*");
+  });
+
+  it("keeps the retained production permission in its own template", () => {
+    const permissionStack = readFileSync(
+      path.join(packageRoot, "prod-retry-permission.yaml"),
+      "utf8",
+    );
+    expect(permissionStack).toContain("Type: AWS::Lambda::Permission");
+    expect(permissionStack).toContain("DeletionPolicy: Retain");
+    expect(permissionStack).toContain("UpdateReplacePolicy: Retain");
+    expect(permissionStack).toContain(`FunctionName: ${prodNames.retryFunction}`);
+    expect(permissionStack).toContain(
+      "arn:aws:events:eu-west-2:796174527529:rule/occasionfun-co-uk-prod-contact-retry",
+    );
+    expect(permissionStack).toContain("occasionfun-co-uk-prod-contact-retry-permission");
+    expect(permissionStack).not.toContain("GHXjmJNlS8ce");
+    expect(permissionStack).not.toContain("occasionfun-co-uk-contact-retry");
     expect(permissionStack).not.toContain("SourceAccount");
     expect(permissionStack).not.toContain("*");
   });
