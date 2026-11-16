@@ -107,17 +107,32 @@ describe("contact API environments", () => {
     expect(production).not.toContain("SourceAccount");
     expect(production).not.toContain("GHXjmJNlS8ce");
     expect(production).not.toMatch(/Type:\s*Schedule\b/);
+    const productionPermissionSourceArn =
+      "arn:aws:events:eu-west-2:796174527529:rule/occasionfun-co-uk-prod-contact-retry";
+    const permission = production.slice(
+      production.indexOf("  ContactRetryFunctionRetrySchedulePermission:"),
+      production.indexOf("  ContactHttpApi:"),
+    );
+    expect(permission.startsWith("  ContactRetryFunctionRetrySchedulePermission:")).toBe(true);
+    expect(permission).toContain("Type: AWS::Lambda::Permission");
+    expect(permission).toContain("Action: lambda:InvokeFunction");
+    expect(permission).toContain("Principal: events.amazonaws.com");
+    expect(permission).toContain(`FunctionName: ${prodNames.retryFunction}`);
+    expect(permission).toContain(`SourceArn: ${productionPermissionSourceArn}`);
+    expect(permission).not.toMatch(/[!{]|SourceAccount|!Ref|!GetAtt|Fn::/);
     expect(production).toContain("Type: AWS::Lambda::Permission");
-    expect(production).toContain("FunctionName: !Ref ContactRetryFunction");
-    expect(production).toContain("SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn");
+    expect(production).not.toContain("FunctionName: !Ref ContactRetryFunction");
+    expect(production).not.toContain("SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn");
     expect(production).toContain("FunctionName: occasionfun-co-uk-prod-contact-retry");
     expect(production).toContain(`Name: ${prodNames.retryRuleName}`);
     expect(prodNames.retryRuleName.length).toBeLessThanOrEqual(64);
     expect(prodNames.retryRuleName.startsWith("occasionfun-co-uk-prod-contact-")).toBe(true);
     expect(production).not.toContain("FunctionName: occasionfun-co-uk-contact-retry");
     expect(production).not.toContain("arn:aws:lambda:");
-    expect(production).not.toContain("arn:aws:events:");
-    expect(renderContactTemplate(template, "demo")).toBe(template);
+    expect(production.match(/arn:aws:events:\S+/g)).toEqual([productionPermissionSourceArn]);
+    const demo = renderContactTemplate(template, "demo");
+    expect(demo).toBe(template);
+    expect(demo).not.toContain("ContactRetryFunctionRetrySchedulePermission:");
   });
 
   it("points both functions at the table created by the same stack", () => {

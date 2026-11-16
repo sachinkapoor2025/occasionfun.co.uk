@@ -16,13 +16,22 @@ const PHYSICAL_NAMES = [
   { property: "FunctionName", key: "retryFunction" },
 ];
 
+/**
+ * Resolved values of the permission already deployed on
+ * occasionfun-co-uk-prod-contact. A Ref or GetAtt makes CloudFormation
+ * report a conditional replacement whenever the retry function changes.
+ */
+const PRODUCTION_RETRY_FUNCTION_NAME = "occasionfun-co-uk-prod-contact-retry";
+const PRODUCTION_RETRY_SOURCE_ARN =
+  "arn:aws:events:eu-west-2:796174527529:rule/occasionfun-co-uk-prod-contact-retry";
+
 const PRODUCTION_RETRY_PERMISSION = `  ContactRetryFunctionRetrySchedulePermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !Ref ContactRetryFunction
+      FunctionName: ${PRODUCTION_RETRY_FUNCTION_NAME}
       Principal: events.amazonaws.com
-      SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn
+      SourceArn: ${PRODUCTION_RETRY_SOURCE_ARN}
 `;
 
 function escapeRegExp(value) {
@@ -132,12 +141,21 @@ export function renderContactTemplate(template, environment) {
     }
     rendered = nameProductionRetryRule(rendered);
     rendered = insertProductionPermission(rendered);
-    const permission = resourceBlock(rendered, "ContactRetryFunctionRetrySchedulePermission");
-    if (!permission.includes("FunctionName: !Ref ContactRetryFunction")) {
-      throw new Error("Production retry permission must reference its own function.");
+    if (
+      PRODUCTION.retryFunction !== PRODUCTION_RETRY_FUNCTION_NAME ||
+      PRODUCTION.retryRuleName !== PRODUCTION_RETRY_FUNCTION_NAME
+    ) {
+      throw new Error("Production retry permission literals do not match the deployed function and rule.");
     }
-    if (!permission.includes("SourceArn: !GetAtt ContactRetryFunctionRetrySchedule.Arn")) {
-      throw new Error("Production retry permission must reference its own rule.");
+    const permission = resourceBlock(rendered, "ContactRetryFunctionRetrySchedulePermission");
+    if (!permission.includes(`FunctionName: ${PRODUCTION_RETRY_FUNCTION_NAME}`)) {
+      throw new Error("Production retry permission must use the deployed function name.");
+    }
+    if (!permission.includes(`SourceArn: ${PRODUCTION_RETRY_SOURCE_ARN}`)) {
+      throw new Error("Production retry permission must use the deployed rule ARN.");
+    }
+    if (/[!{]|SourceAccount|!Ref|!GetAtt|Fn::/.test(permission)) {
+      throw new Error("Production retry permission must not use a dynamic reference.");
     }
     if (rendered.includes("GHXjmJNlS8ce") || rendered.includes(`function:${DEMO.retryFunction}`)) {
       throw new Error("Production template still targets the demo retry function or rule.");
