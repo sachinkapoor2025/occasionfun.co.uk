@@ -16,8 +16,6 @@ const PHYSICAL_NAMES = [
   { property: "FunctionName", key: "retryFunction" },
 ];
 
-const PRODUCTION_RETRY_RULE_NAME = "occasionfun-co-uk-prod-contact-retry";
-
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -80,7 +78,7 @@ function declaresRetryPermission(template) {
 }
 
 function nameProductionRetryRule(template) {
-  const name = PRODUCTION_RETRY_RULE_NAME;
+  const name = PRODUCTION.retryRuleName;
   if (name.length > 64 || !name.startsWith("occasionfun-co-uk-prod-contact-")) {
     throw new Error("Production retry rule name is outside the execution role permission.");
   }

@@ -45,7 +45,7 @@ function stderrLines(stderr) {
   return String(stderr ?? "")
     .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => line.trim().replace(/^aws:\s*\[[A-Za-z]+\]:\s*/, ""))
     .filter((line) => line.length > 0);
 }
 

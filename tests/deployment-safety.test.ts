@@ -21,7 +21,7 @@ import {
   verifyAutoBuildDisabled,
 } from "../scripts/amplify-demo-release.mjs";
 import { classifyDescribeStacks } from "../scripts/classify-stack-describe.mjs";
-import { resolvePublicEnv } from "../scripts/amplify-public-env.mjs";
+import { renderPublicEnv, resolvePublicEnv } from "../scripts/amplify-public-env.mjs";
 import {
   assertDeployConfig,
   parseFlatYaml,
@@ -444,6 +444,8 @@ describe("GitHub Actions workflows", () => {
     expect(deployScript).toContain("delete-change-set");
     expect(deployScript).not.toContain("delete-stack");
     expect(deployScript).toContain("classify-stack-describe.mjs");
+    expect(deployScript).toContain("AWS CLI stderr:");
+    expect(deployScript).toContain("exited ${describe_status}.");
     expect(deployScript).not.toContain('stack_status=""');
     expect(deployScript.indexOf("classify-stack-describe.mjs")).toBeLessThan(
       deployScript.indexOf('change_mode="create"'),
@@ -491,7 +493,7 @@ describe("GitHub Actions workflows", () => {
     expect(smoke).toContain("if: success()");
   });
 
-  it("cannot deploy production without the environment gate or with demo credentials", () => {
+  it("cannot deploy production without the environment gate", () => {
     expect(pipeline).toContain("branches: [demo, main, master]");
     expect(production).toContain("needs: validate");
     expect(production).toContain("github.event_name == 'push' && github.ref == 'refs/heads/main'");
@@ -503,11 +505,17 @@ describe("GitHub Actions workflows", () => {
     expect(production.indexOf("environment: production")).toBeLessThan(
       production.indexOf("required_reviewers"),
     );
+    expect(production).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(production).toContain("actions: read");
     expect(production).toContain("required_reviewers");
-    expect(production).toContain("secrets.AWS_PRODUCTION_ACCESS_KEY_ID");
-    expect(production).toContain("secrets.AWS_PRODUCTION_SECRET_ACCESS_KEY");
-    expect(production).not.toContain("secrets.AWS_ACCESS_KEY_ID");
-    expect(production).not.toContain("secrets.AWS_SECRET_ACCESS_KEY");
+    expect(production).toContain("GitHub refused to read the production environment");
+    expect(production).toContain("The production environment does not exist.");
+    expect(production).toContain("The production environment exists, but it has no required reviewer rule.");
+    expect(production).toContain("aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}");
+    expect(production).toContain("aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}");
+    expect(production).not.toContain("AWS_PRODUCTION_ACCESS_KEY_ID");
+    expect(production).not.toContain("AWS_PRODUCTION_SECRET_ACCESS_KEY");
+    expect(production).not.toContain("Require production AWS credentials");
     expect(production).toContain("name: contact-production-template");
     expect(production).toContain("sam build --template template.production.yaml");
     expect(production).not.toContain("sam build --template template.yaml");
@@ -576,25 +584,59 @@ describe("GitHub Actions workflows", () => {
 
   it("keeps the Amplify demo fallback off every non-demo branch", () => {
     const amplify = readFileSync(path.join(root, "amplify.yml"), "utf8");
+    expect(amplify).toContain("nvm install 24");
+    expect(amplify).toContain("nvm alias default 24");
     expect(amplify).toContain("node scripts/amplify-public-env.mjs");
     expect(resolvePublicEnv("demo", {})).toEqual({
       NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint,
       NEXT_PUBLIC_SITE_URL: DEMO.siteUrl,
     });
-    const productionEndpoint = "https://prod123.execute-api.eu-west-2.amazonaws.com/contact";
     expect(
-      resolvePublicEnv("main", { NEXT_PUBLIC_CONTACT_ENDPOINT: productionEndpoint }),
+      resolvePublicEnv("demo", { NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint }),
     ).toEqual({
-      NEXT_PUBLIC_CONTACT_ENDPOINT: productionEndpoint,
+      NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint,
+      NEXT_PUBLIC_SITE_URL: DEMO.siteUrl,
+    });
+    expect(resolvePublicEnv("main", {})).toEqual({
+      NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint,
       NEXT_PUBLIC_SITE_URL: PRODUCTION.siteUrl,
     });
-    expect(resolvePublicEnv("master", {}).NEXT_PUBLIC_CONTACT_ENDPOINT).toBe("");
+    expect(
+      resolvePublicEnv("main", { NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint }),
+    ).toEqual({
+      NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint,
+      NEXT_PUBLIC_SITE_URL: PRODUCTION.siteUrl,
+    });
+    expect(new URL(PRODUCTION.endpoint).hostname).toBe(
+      "k20xd6a2pd.execute-api.eu-west-2.amazonaws.com",
+    );
+    expect(resolvePublicEnv("master", {}).NEXT_PUBLIC_CONTACT_ENDPOINT).toBe(
+      PRODUCTION.endpoint,
+    );
     expect(resolvePublicEnv("master", {}).NEXT_PUBLIC_SITE_URL).toBe(PRODUCTION.siteUrl);
     for (const branch of ["main", "master", "feature", "production", ""]) {
       expect(() =>
         resolvePublicEnv(branch, { NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint }),
       ).toThrow(/refused the demo contact API/);
     }
+    expect(() =>
+      resolvePublicEnv("main", {
+        NEXT_PUBLIC_CONTACT_ENDPOINT: "https://other.execute-api.eu-west-2.amazonaws.com/contact",
+      }),
+    ).toThrow(/not the production API/);
+    expect(() =>
+      resolvePublicEnv("demo", { NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint }),
+    ).toThrow(/refused the production contact API/);
+    const rendered = renderPublicEnv("main", {
+      AWS_SECRET_ACCESS_KEY: "secret-value",
+      SMTP_SECRET_ARN: "arn:aws:secretsmanager:eu-west-2:796174527529:secret:smtp",
+      NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint,
+    });
+    expect(rendered).toContain(`NEXT_PUBLIC_CONTACT_ENDPOINT=${PRODUCTION.endpoint}`);
+    expect(rendered).not.toContain("AWS_SECRET_ACCESS_KEY");
+    expect(rendered).not.toContain("secret-value");
+    expect(rendered).not.toContain("secretsmanager");
+    expect(rendered).not.toContain(DEMO.apiId);
   });
 });
 
@@ -867,6 +909,30 @@ describe("describe-stacks classification", () => {
         stackName: stack,
       }).reason,
     ).toBe("unexpected");
+    const denied =
+      "An error occurred (AccessDenied) when calling the DescribeStacks operation: User: arn:aws:iam::796174527529:user/occasionfun-github-deploy is not authorized to perform: cloudformation:DescribeStacks on resource: arn:aws:cloudformation:eu-west-2:796174527529:stack/occasionfun-co-uk-prod-contact/* with an explicit deny in an identity-based policy: arn:aws:iam::796174527529:policy/OccasionFunGitHubDemoDeploymentPolicy";
+    expect(
+      classifyDescribeStacks({
+        exitStatus: 254,
+        stderr: `aws: [ERROR]: ${denied}\n\nAdditional error details:\nType: User`,
+        stackName: stack,
+      }).reason,
+    ).toBe("access-denied");
+    expect(
+      classifyDescribeStacks({
+        exitStatus: 254,
+        stderr: `aws: [ERROR]: ${missing}`,
+        stackName: stack,
+      }).result,
+    ).toBe("missing");
+    expect(
+      classifyDescribeStacks({
+        exitStatus: 254,
+        stderr:
+          "aws: [ERROR]: An error occurred (ValidationError) when calling the DescribeStacks operation: 1 validation error detected",
+        stackName: stack,
+      }).reason,
+    ).toBe("unexpected");
   });
 });
 
@@ -931,6 +997,8 @@ describe("deployment script configuration check", () => {
 
 const DEMO_CLOUDFORMATION_ROLE_ARN =
   "arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo";
+const PRODUCTION_CLOUDFORMATION_ROLE_ARN =
+  "arn:aws:iam::796174527529:role/occasionfun-cloudformation-production";
 
 function runConfigCheck(
   environment: "demo" | "prod",
@@ -1109,9 +1177,14 @@ describe("CloudFormation execution role", () => {
       productionJob.indexOf("  smoke-test:"),
     );
     expect(productionSlice).not.toContain("occasionfun-cloudformation-demo");
-    expect(productionSlice).not.toContain("secrets.AWS_ACCESS_KEY_ID");
+    expect(productionSlice).toContain(
+      `--role-arn ${PRODUCTION_CLOUDFORMATION_ROLE_ARN}`,
+    );
+    expect(productionSlice).toContain("secrets.AWS_ACCESS_KEY_ID");
+    expect(productionSlice).toContain("secrets.AWS_SECRET_ACCESS_KEY");
     expect(productionSlice).toContain("--stack-name occasionfun-co-uk-prod-contact");
-    expect(samDeploy).not.toContain("--role-arn \"$ROLE_ARN\"");
+    expect(samDeploy).toContain('--role-arn "$PRODUCTION_CLOUDFORMATION_ROLE_ARN"');
+    expect(samDeploy).not.toContain('--role-arn "$ROLE_ARN"');
     const result = runConfigCheck("prod", ["--role-arn", DEMO_CLOUDFORMATION_ROLE_ARN]);
     expect(result.status).toBe(1);
     expect(`${result.stdout}\n${result.stderr}`).toMatch(
@@ -1120,9 +1193,27 @@ describe("CloudFormation execution role", () => {
     expect(result.stdout).not.toContain("Demo change sets use CloudFormation role");
     expect(result.stdout).not.toContain("No change set was created.");
 
+    const otherRole = runConfigCheck("prod", [
+      "--role-arn",
+      "arn:aws:iam::796174527529:role/occasionfun-cloudformation-other",
+    ]);
+    expect(otherRole.status).toBe(1);
+    expect(`${otherRole.stdout}\n${otherRole.stderr}`).toMatch(
+      /Production deployment rejected a different CloudFormation execution role/,
+    );
+    expect(otherRole.stdout).not.toContain("No change set was created.");
+
     const withoutRole = runConfigCheck("prod");
     expect(withoutRole.status, withoutRole.stderr || withoutRole.stdout).toBe(0);
+    expect(withoutRole.stdout).toContain(
+      `Production change sets use CloudFormation role ${PRODUCTION_CLOUDFORMATION_ROLE_ARN}.`,
+    );
     expect(withoutRole.stdout).not.toContain(DEMO_CLOUDFORMATION_ROLE_ARN);
     expect(withoutRole.stdout).toContain("No change set was created.");
+
+    const explicit = runConfigCheck("prod", ["--role-arn", PRODUCTION_CLOUDFORMATION_ROLE_ARN]);
+    expect(explicit.status, explicit.stderr || explicit.stdout).toBe(0);
+    expect(explicit.stdout).toContain(PRODUCTION_CLOUDFORMATION_ROLE_ARN);
+    expect(explicit.stdout).toContain("No change set was created.");
   });
 });

@@ -111,10 +111,10 @@ describe("contact API environments", () => {
     expect(production).not.toMatch(/Type:\s*Schedule\b/);
     expect(production).not.toContain("ContactRetryFunctionRetrySchedulePermission:");
     expect(production).not.toContain("Type: AWS::Lambda::Permission");
+    expect(production).toContain("FunctionName: occasionfun-co-uk-prod-contact-retry");
     expect(production).toContain(`Name: ${prodNames.retryRuleName}`);
     expect(prodNames.retryRuleName.length).toBeLessThanOrEqual(64);
     expect(prodNames.retryRuleName.startsWith("occasionfun-co-uk-prod-contact-")).toBe(true);
-    expect(production).toContain("FunctionName: occasionfun-co-uk-prod-contact-retry");
     expect(production).not.toContain("FunctionName: occasionfun-co-uk-contact-retry");
     expect(production).not.toContain("arn:aws:lambda:");
     expect(production).not.toContain("arn:aws:events:");
