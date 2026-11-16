@@ -22,7 +22,9 @@ export const company = {
   businessEmail: "[INSERT VERIFIED BUSINESS EMAIL]",
   /** Registration and bidding correspondence only. Not a contact-form destination. */
   biddingEmail: "bids@occasionfun.co.uk",
-  businessPhone: "+44 7865 576786",
+  businessPhone: "+44-7710647388",
+  /** Compact tel target for the displayed business number. */
+  businessPhoneTel: "tel:+447710647388",
   domain: "[INSERT VERIFIED WEBSITE DOMAIN]",
   /**
    * Public SEO origin. Always the apex site. Do not replace this with a www

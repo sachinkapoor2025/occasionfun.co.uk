@@ -141,7 +141,7 @@ describe("contact API environments", () => {
     expect(template.match(/SMTP_FROM: enquiries@occasionfun.co.uk/g)).toHaveLength(2);
     expect(
       template.match(
-        /SMTP_TO: dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk/g,
+        /SMTP_TO: dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk,bids@occasionfun.co.uk/g,
       ),
     ).toHaveLength(2);
   });

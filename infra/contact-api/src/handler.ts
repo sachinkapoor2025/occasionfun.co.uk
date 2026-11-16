@@ -27,7 +27,7 @@ const secretArn = process.env.SMTP_SECRET_ARN ?? "";
 const smtpFrom = process.env.SMTP_FROM ?? "enquiries@occasionfun.co.uk";
 const smtpTo = (
   process.env.SMTP_TO ??
-  "dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk"
+  "dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk,bids@occasionfun.co.uk"
 )
   .split(",")
   .map((value) => value.trim())

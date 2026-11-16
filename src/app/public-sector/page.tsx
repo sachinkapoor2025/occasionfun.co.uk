@@ -144,7 +144,7 @@ export default function PublicSectorPage() {
           <div className="border-t border-slate-200 pt-4">
             <dt className="text-sm font-semibold text-navy-900">Telephone</dt>
             <dd className="mt-1 text-sm text-slate-600">
-              <a href="tel:+447865576786" className="font-medium text-accent">
+              <a href={company.businessPhoneTel} className="font-medium text-accent">
                 {company.businessPhone}
               </a>
             </dd>

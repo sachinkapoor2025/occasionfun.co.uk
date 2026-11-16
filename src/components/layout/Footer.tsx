@@ -38,7 +38,7 @@ export function Footer() {
                 <dt className="inline font-semibold text-white">Telephone: </dt>
                 <dd className="inline">
                   <a
-                    href="tel:+447865576786"
+                    href={company.businessPhoneTel}
                     className="hover:text-white"
                   >
                     {company.businessPhone}

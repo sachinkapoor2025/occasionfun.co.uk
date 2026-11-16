@@ -75,7 +75,7 @@ export default function ContactPage() {
             </p>
             <p className="mt-2 text-sm text-slate-600">
               Telephone:{" "}
-              <a href="tel:+447865576786" className="font-medium text-accent">
+              <a href={company.businessPhoneTel} className="font-medium text-accent">
                 {company.businessPhone}
               </a>
             </p>
