@@ -8,7 +8,7 @@ import { createPageMetadata } from "@/lib/seo";
 export const metadata = createPageMetadata({
   title: "Contact",
   description:
-    "Contact OCCASIONFUN LTD about technology services, public-sector procurement, or supplier information requests.",
+    "General enquiries use the OCCASIONFUN LTD contact form. Registration and bidding correspondence uses bids@occasionfun.co.uk.",
   path: "/contact",
 });
 
@@ -38,9 +38,10 @@ export default function ContactPage() {
             Let&apos;s discuss your project.
           </h1>
           <p className="mt-4 text-base leading-relaxed text-slate-600">
-            Tell us about a technology requirement, procurement opportunity or
-            supplier enquiry. OccasionFun Ltd receives the enquiry and
-            coordinates the engagement.
+            For a general enquiry, use the contact form. OccasionFun Ltd, a UK
+            technology services company, receives the form and coordinates the
+            engagement. Registration and bidding correspondence uses a separate
+            email address, shown beside the company details.
           </p>
           <ul className="mt-6 space-y-3">
             {enquiryTopics.map(({ title, icon: Icon }) => (
@@ -67,14 +68,40 @@ export default function ContactPage() {
               {company.legalName}
             </p>
             <p className="mt-1 text-sm text-slate-600">
-              Company number {company.companyNumber}
+              Company number: {company.companyNumber}
             </p>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              Office address, email and telephone are not published on this
-              page.
+              Address: {company.businessAddress}
             </p>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            <p className="mt-2 text-sm text-slate-600">
+              Telephone:{" "}
+              <a href="tel:+447865576786" className="font-medium text-accent">
+                {company.businessPhone}
+              </a>
+            </p>
+            <p className="mt-2 text-sm text-slate-600">
+              {company.ukRepresentativeName} — {company.ukRepresentativeRole}
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
               No response time is published.
+            </p>
+          </div>
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 className="text-lg text-navy-900">
+              Registration and bidding enquiries
+            </h2>
+            <p className="mt-3 text-sm text-slate-600">
+              <a
+                href={`mailto:${company.biddingEmail}`}
+                className="font-semibold text-accent"
+              >
+                {company.biddingEmail}
+              </a>
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              Use this address for registration and bidding correspondence.
+              General enquiries use the contact form. Submitting the form does
+              not send a notification to this address.
             </p>
           </div>
         </aside>

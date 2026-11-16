@@ -3,13 +3,14 @@ import { ButtonLink } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
-import { digitalProjects } from "@/content/projects";
+import { partnershipShort } from "@/config/company";
+import { caseStudies } from "@/content/case-studies";
 import { createPageMetadata } from "@/lib/seo";
 
 export const metadata = createPageMetadata({
   title: "Our work",
   description:
-    "Selected digital platforms across gifting, seasonal retail and specialist product categories. Shown as project previews, not as client case studies or measured results.",
+    "Four selected technology projects — UsaRakhi, BlossomPot, SpicyCenter and HalloweenReady — delivered with Divit Global Ventures (DGV). Each card opens an on-site case study.",
   path: "/our-work",
 });
 
@@ -17,44 +18,32 @@ const relatedServices = [
   {
     href: "/services/software-development",
     title: "Software and application development",
-    text: "Custom web applications, APIs and business software.",
+    text: "Custom applications, APIs and business software. The case studies on this page are examples of that engineering work.",
   },
   {
-    href: "/services/wordpress-web",
-    title: "WordPress and web development",
-    text: "Corporate and content-managed websites.",
+    href: "/services/cloud-aws-devops",
+    title: "Cloud, AWS and DevOps",
+    text: "The same projects use AWS services for data, compute, storage and authentication. Scope is still agreed per engagement.",
   },
 ];
-
-function ExternalMark() {
-  return (
-    <>
-      <span aria-hidden="true">↗</span>
-      <span className="sr-only"> (opens in a new tab)</span>
-    </>
-  );
-}
 
 export default function OurWorkPage() {
   return (
     <>
       <PageHeader
         eyebrow="Our work"
-        title="Selected Digital Projects"
-        description="Explore a selection of digital platforms across gifting, seasonal retail and specialist product categories. These projects demonstrate different types of online experiences, business requirements and digital capabilities. They are shown as selected digital projects. Commissioning, ownership and results are not stated on this page."
+        title="Selected technology projects"
+        description={`${partnershipShort} The four projects below were delivered through that working relationship. Each card opens an on-site case study describing the technology. The pages do not name a client, a budget or a result.`}
       />
 
       <section className="bg-role-primary py-10 sm:py-12">
         <Container>
           <ul className="grid gap-8 md:grid-cols-2">
-            {digitalProjects.map((project) => (
-              <li key={project.href}>
+            {caseStudies.map((project) => (
+              <li key={project.slug}>
                 <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <a
-                    href={project.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`${project.alt} Opens in a new tab.`}
+                  <Link
+                    href={`/our-work/${project.slug}`}
                     className="block bg-slate-50"
                   >
                     <img
@@ -62,37 +51,44 @@ export default function OurWorkPage() {
                       alt={project.alt}
                       width={project.imageWidth}
                       height={project.imageHeight}
+                      loading="lazy"
+                      decoding="async"
                       className="h-auto w-full"
                     />
-                  </a>
+                  </Link>
                   <div className="flex flex-1 flex-col p-6 sm:p-8">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">
-                      Selected digital project
+                      Case study
                     </p>
                     <h2 className="mt-3 text-2xl text-navy-900">
-                      <a
-                        href={project.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 hover:text-accent"
+                      <Link
+                        href={`/our-work/${project.slug}`}
+                        className="hover:text-accent"
                       >
                         {project.name}
-                        <ExternalMark />
-                      </a>
+                      </Link>
                     </h2>
-                    <p className="mt-3 flex-1 text-sm leading-relaxed text-slate-600">
-                      {project.description}
+                    <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                      {project.summary}
                     </p>
+                    <ul className="mt-4 flex flex-wrap gap-2">
+                      {project.capabilities.map((label) => (
+                        <li
+                          key={label}
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-navy-800"
+                        >
+                          {label}
+                        </li>
+                      ))}
+                    </ul>
                     <div className="mt-6">
-                      <a
-                        href={project.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-5 py-3 text-sm font-semibold text-navy-900 hover:border-navy-700 hover:bg-white"
+                      <ButtonLink
+                        href={`/our-work/${project.slug}`}
+                        variant="ghost"
+                        aria-label={`Read the ${project.name} case study`}
                       >
-                        Visit website
-                        <ExternalMark />
-                      </a>
+                        Read Case Study
+                      </ButtonLink>
                     </div>
                   </div>
                 </article>
@@ -104,8 +100,8 @@ export default function OurWorkPage() {
 
       <Section
         tone="muted"
-        title="Capabilities these experiences relate to"
-        description="The links below are service descriptions. They do not state which technology was used on a project, or any contract or result."
+        title="Related services"
+        description="These projects are software platforms delivered on AWS. They are not WordPress sites."
       >
         <ul className="grid gap-6 sm:grid-cols-2">
           {relatedServices.map((service) => (
@@ -125,8 +121,9 @@ export default function OurWorkPage() {
 
       <Section title="How a project is taken forward">
         <p className="max-w-3xl text-base leading-relaxed text-slate-600">
-          The lifecycle, and which company does each part, is explained
-          separately. It is not repeated here.
+          OccasionFun engages the client, agrees the requirement and coordinates
+          the work. DGV designs, develops and delivers the software. The stages
+          are described on the how-we-work page.
         </p>
         <div className="mt-6">
           <ButtonLink href="/how-we-work" variant="ghost">
@@ -140,8 +137,9 @@ export default function OurWorkPage() {
           <div className="rounded-2xl bg-role-emphasis px-6 py-10 sm:px-10 sm:py-12">
             <h2 className="text-3xl text-white sm:text-4xl">Discuss a project</h2>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-200">
-              Tell OccasionFun about a requirement. This page is not a proposal
-              or a record of results.
+              Tell OccasionFun about a requirement. These case studies describe
+              technology that has been built. They are not a proposal or a
+              record of results.
             </p>
             <div className="mt-8">
               <ButtonLink href="/contact">Discuss a project</ButtonLink>

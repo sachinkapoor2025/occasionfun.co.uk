@@ -4,32 +4,32 @@ import { Container } from "@/components/ui/Container";
 import { CTABanner } from "@/components/ui/CTABanner";
 import { Section } from "@/components/ui/Section";
 import { ServiceCatalogue } from "@/components/ui/ServiceCatalogue";
-import { company } from "@/config/company";
+import { company, partnershipSummary } from "@/config/company";
 import { createPageMetadata } from "@/lib/seo";
 
 export const metadata = createPageMetadata({
   title: company.legalName,
   description:
-    "OccasionFun Ltd is a UK-registered IT services company. It identifies technology project opportunities, leads bidding and business engagement, and coordinates delivery with DGV Group.",
+    "UK technology services from OccasionFun Ltd, including client engagement, requirements, bidding and project coordination, delivered with Divit Global Ventures (DGV).",
   path: "/",
 });
 
 const whatWeDo = [
   {
-    title: "Opportunity identification",
-    text: "We look for technology project opportunities that fit the capabilities of OccasionFun and DGV Group.",
+    title: "Client engagement",
+    text: "OccasionFun engages UK businesses, public-sector buyers and prime contractors, and keeps the client conversation.",
   },
   {
-    title: "Bidding and proposals",
-    text: "We prepare responses for commercial clients, public-sector buyers and prime contractors.",
-  },
-  {
-    title: "Business engagement",
-    text: "OccasionFun is the UK company a client deals with for the relationship, the bid and the project conversation.",
+    title: "Requirements and bidding",
+    text: "We gather requirements and prepare proposals for commercial clients, public-sector buyers and prime contractors.",
   },
   {
     title: "Project coordination",
-    text: "We coordinate scope, communication and handover. Technical execution is carried out by DGV Group.",
+    text: "We coordinate scope, communication and handover, and support delivery of the technology project.",
+  },
+  {
+    title: "Technology delivery",
+    text: "DGV designs, develops and delivers digital platforms and software for clients. OccasionFun coordinates that work with the client.",
   },
 ];
 
@@ -48,11 +48,11 @@ const deliverySteps = [
   },
   {
     title: "Technical architecture and design",
-    text: "DGV Group plans the technical approach for the agreed work.",
+    text: "DGV designs the digital platform or software for the client.",
   },
   {
     title: "Development and implementation",
-    text: "DGV Group builds and implements the solution.",
+    text: "DGV develops and delivers the solution for the client.",
   },
   {
     title: "Testing and quality assurance",
@@ -71,11 +71,11 @@ const deliverySteps = [
 const whyOccasionFun = [
   {
     title: "Clear business and technical responsibilities",
-    text: "OccasionFun leads the commercial relationship and project coordination. DGV Group carries out the technical work.",
+    text: "OccasionFun handles UK client engagement, requirements, bidding and project coordination. DGV designs, develops and delivers the technology for clients.",
   },
   {
     title: "Dedicated technology delivery",
-    text: "DGV Group provides technical planning, engineering, development, testing and implementation.",
+    text: "DGV is a technology delivery company. It provides IT services, software development and technical project delivery for clients under a signed agreement.",
   },
   {
     title: "Broad technology capabilities",
@@ -104,10 +104,7 @@ export default function HomePage() {
               IT services and technology projects, coordinated from the UK.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-600">
-              OccasionFun Ltd identifies project opportunities, leads bidding
-              and business engagement, and coordinates delivery. The technical
-              work is carried out by DGV Group, a separate India-registered
-              company under common ownership.
+              {partnershipSummary}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <ButtonLink href="/contact">Discuss a project</ButtonLink>
@@ -119,21 +116,21 @@ export default function HomePage() {
 
           <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)]">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
-              Two companies, one ownership
+              Separate legal entities
             </p>
             <dl className="mt-4 space-y-4 text-sm">
               <div>
                 <dt className="font-semibold text-navy-900">OccasionFun Ltd</dt>
                 <dd className="mt-1 text-slate-600">
-                  UK-registered company {company.companyNumber}. Project
-                  opportunities, bidding, business engagement and coordination.
+                  UK technology services company {company.companyNumber}. Client
+                  engagement, requirements, bidding, coordination and communication.
                 </dd>
               </div>
               <div>
-                <dt className="font-semibold text-navy-900">DGV Group</dt>
+                <dt className="font-semibold text-navy-900">DGV</dt>
                 <dd className="mt-1 text-slate-600">
-                  India-registered company. Technical planning, engineering,
-                  development, testing and implementation.
+                  Technology delivery partner. Designs, develops and delivers IT
+                  solutions and digital platforms for clients.
                 </dd>
               </div>
             </dl>
@@ -151,8 +148,8 @@ export default function HomePage() {
         id="what-we-do"
         className="scroll-mt-24"
         eyebrow="What we do"
-        title="We run the business side of technology projects"
-        description="OccasionFun’s role is to find, bid and coordinate the work. The individual technical services are how DGV Group delivers it."
+        title="Technology services, coordinated from the UK"
+        description="OccasionFun engages clients, understands their requirements and coordinates technology projects. DGV designs, develops and delivers the IT solutions and digital platforms."
       >
         <ul className="grid gap-6 sm:grid-cols-2">
           {whatWeDo.map((item) => (
@@ -171,8 +168,8 @@ export default function HomePage() {
         className="scroll-mt-24"
         tone="muted"
         eyebrow="Our business and delivery model"
-        title="OccasionFun coordinates. DGV Group builds."
-        description="These are two distinct companies under common ownership. They are not the same legal entity, and DGV Group is not a network of outside suppliers."
+        title="OccasionFun coordinates. DGV designs, develops and delivers."
+        description="OccasionFun Ltd and DGV are separate legal entities under common ownership and work under a signed agreement. DGV is a technology delivery company. It designs, develops and delivers IT solutions and digital platforms for clients."
       >
         <div className="grid gap-6 lg:grid-cols-2">
           <article className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -181,30 +178,31 @@ export default function HomePage() {
             </p>
             <h3 className="mt-3 text-2xl text-navy-900">OccasionFun Ltd</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              The UK-registered company clients and buyers contract and
-              communicate with for an opportunity.
+              UK technology services: client engagement, requirements, bidding,
+              coordination and support for delivery.
             </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-700">
-              <li>Opportunity identification</li>
-              <li>Bidding</li>
-              <li>Business engagement</li>
+              <li>Client engagement and communication</li>
+              <li>Requirements and bidding</li>
               <li>Project coordination</li>
+              <li>Support for technology delivery</li>
             </ul>
           </article>
           <article className="rounded-2xl border border-slate-200 bg-white p-6">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
-              India
+              Technology partner
             </p>
-            <h3 className="mt-3 text-2xl text-navy-900">DGV Group</h3>
+            <h3 className="mt-3 text-2xl text-navy-900">DGV</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              The India-registered company that provides the dedicated technical
-              delivery for an agreed project.
+              A technology delivery company. Provides IT services, software
+              development, application engineering and technical project
+              delivery for clients.
             </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-700">
-              <li>Technical planning</li>
-              <li>Engineering and development</li>
-              <li>Testing</li>
-              <li>Implementation</li>
+              <li>IT services and software development</li>
+              <li>Application engineering</li>
+              <li>Design and development of digital platforms</li>
+              <li>Technical project delivery</li>
             </ul>
           </article>
         </div>
@@ -221,7 +219,7 @@ export default function HomePage() {
             },
             {
               title: "Deliver",
-              text: "DGV Group plans, builds, tests and implements the technical work.",
+              text: "DGV designs, develops and delivers the digital platform or software for the client.",
             },
             {
               title: "Hand over",
@@ -317,7 +315,7 @@ export default function HomePage() {
         className="scroll-mt-24"
         eyebrow="Our work"
         title="Project records have their own page"
-        description="Services describe what can be undertaken. Published project experience is kept on Our Work, and only when it can be verified."
+        description="Four selected technology projects are published as on-site case studies. They describe the software that was built. They do not name a client or a result."
       >
         <div className="mt-2">
           <ButtonLink href="/our-work" variant="ghost">

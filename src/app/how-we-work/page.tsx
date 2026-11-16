@@ -3,6 +3,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
+import { partnershipSummary } from "@/config/company";
 import { createPageMetadata } from "@/lib/seo";
 
 export const metadata = createPageMetadata({
@@ -16,42 +17,42 @@ const steps = [
   {
     title: "Opportunity identification",
     who: "OccasionFun",
-    text: "OccasionFun looks for a technology opportunity that fits the work the companies can coordinate and deliver.",
+    text: "OccasionFun handles the UK business engagement for a technology opportunity.",
   },
   {
     title: "Requirement evaluation",
-    who: "OccasionFun, with technical input where needed",
-    text: "The requirement, constraints and fit are assessed before a commitment. DGV Group can advise on the technical fit.",
+    who: "OccasionFun",
+    text: "OccasionFun assesses the requirement, constraints and fit with the client before a commitment.",
   },
   {
     title: "Proposal and planning",
-    who: "OccasionFun leads",
-    text: "OccasionFun prepares the proposal and the coordination plan. DGV Group contributes the technical approach for the work being proposed.",
+    who: "OccasionFun",
+    text: "OccasionFun prepares the proposal and coordinates the client relationship.",
   },
   {
     title: "Technical architecture and design",
-    who: "DGV Group",
-    text: "DGV Group plans the architecture and design for the agreed scope.",
+    who: "DGV",
+    text: "DGV designs the digital platform or software for the client.",
   },
   {
     title: "Development and implementation",
-    who: "DGV Group",
-    text: "DGV Group builds and implements the solution. OccasionFun coordinates communication with the client.",
+    who: "DGV",
+    text: "DGV develops and delivers the solution for the client. OccasionFun coordinates communication and supports delivery.",
   },
   {
     title: "Testing and quality assurance",
-    who: "DGV Group",
-    text: "The work is tested against the requirements agreed for that project.",
+    who: "Agreed for that project",
+    text: "Any check against the agreed requirements is part of that project agreement. OccasionFun coordinates the client review. This stage does not add a separate testing obligation.",
   },
   {
     title: "Deployment and handover",
-    who: "Both companies",
-    text: "DGV Group carries out the technical deployment. OccasionFun coordinates acceptance, documentation and handover.",
+    who: "OccasionFun coordinates",
+    text: "DGV delivers the technical solution. OccasionFun coordinates acceptance, documentation and handover.",
   },
   {
     title: "Ongoing support where agreed",
     who: "Only when it is part of the engagement",
-    text: "Support continues only if it was agreed. Who provides it is set out for that engagement, not assumed for every project.",
+    text: "Support continues only if it was agreed for that engagement. No support obligation is assumed, and no response time is stated here.",
   },
 ];
 
@@ -61,7 +62,7 @@ export default function HowWeWorkPage() {
       <PageHeader
         eyebrow="How we work"
         title="From an opportunity to technical delivery and handover"
-        description="A project can move through the stages below. It does not have to use every stage, and the agreement is for that piece of work."
+        description={`${partnershipSummary} A project can move through the stages below. It does not have to use every stage, and the agreement is for that piece of work.`}
       />
 
       <Section title="Project stages">
@@ -112,7 +113,7 @@ export default function HowWeWorkPage() {
         <ul className="grid gap-3 sm:grid-cols-2">
           {[
             "The scope, assumptions and acceptance criteria",
-            "Who at OccasionFun coordinates, and what DGV Group will deliver",
+            "Who at OccasionFun coordinates, and what DGV will design, develop and deliver for the client",
             "Security, data handling and access constraints",
             "Delivery location, where the buyer needs it stated",
             "How change will be handled",

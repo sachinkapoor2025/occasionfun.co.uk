@@ -5,13 +5,14 @@ import {
   legalNav,
   mainNav,
 } from "@/config/navigation";
-import { digitalProjects } from "@/content/projects";
+import { caseStudies } from "@/content/case-studies";
 import {
   getAllServiceSlugs,
   getRelatedServices,
   getServiceBySlug,
   serviceGroups,
 } from "@/content/services";
+import sitemap from "@/app/sitemap";
 import { company, getUnresolvedPlaceholders } from "@/config/company";
 
 const expectedPaths = [
@@ -59,6 +60,22 @@ describe("critical routes and content integrity", () => {
 
   it("defines all expected top-level paths for sitemap coverage checks", () => {
     expect(expectedPaths.length).toBeGreaterThanOrEqual(12);
+  });
+
+  it("publishes apex trailing-slash sitemap URLs and omits draft legal pages", () => {
+    const urls = sitemap().map((entry) =>
+      typeof entry === "string" ? entry : entry.url,
+    );
+    expect(urls.every((url) => url.startsWith("https://occasionfun.co.uk/"))).toBe(
+      true,
+    );
+    expect(urls.some((url) => url.includes("www."))).toBe(false);
+    expect(urls.some((url) => url.includes("amplifyapp.com"))).toBe(false);
+    expect(urls).toContain("https://occasionfun.co.uk/");
+    expect(urls).toContain("https://occasionfun.co.uk/our-work/usarakhi/");
+    for (const path of ["/privacy/", "/cookies/", "/terms/", "/policies/"]) {
+      expect(urls).not.toContain(`https://occasionfun.co.uk${path}`);
+    }
   });
 
   it("has eight service pages with resolvable slugs", () => {
@@ -110,23 +127,29 @@ describe("critical routes and content integrity", () => {
     expect(cyber?.securityNotes).toMatch(/Penetration testing/i);
   });
 
-  it("lists four selected digital projects with absolute website links", () => {
-    expect(digitalProjects.map((project) => project.name)).toEqual([
-      "UsaRakhi.com",
-      "BlossomPot.com",
-      "HalloweenReady.com",
-      "SpicyCenter.com",
+  it("lists four internal case studies and no external project links", () => {
+    expect(caseStudies.map((project) => project.slug)).toEqual([
+      "usarakhi",
+      "blossompot",
+      "spicycenter",
+      "halloweenready",
     ]);
-    expect(digitalProjects.map((project) => project.href)).toEqual([
-      "https://usarakhi.com",
-      "https://blossompot.com",
-      "https://halloweenready.com",
-      "https://spicycenter.com",
+    expect(caseStudies.map((project) => project.name)).toEqual([
+      "UsaRakhi",
+      "BlossomPot",
+      "SpicyCenter",
+      "HalloweenReady",
     ]);
-    for (const project of digitalProjects) {
-      expect(project.href).not.toMatch(/\s/);
+    const published = JSON.stringify(caseStudies);
+    expect(published).not.toMatch(/https?:\/\//);
+    expect(published).not.toMatch(/github\.com/i);
+    expect(published).not.toMatch(/wordpress/i);
+    for (const project of caseStudies) {
       expect(project.image.startsWith("/work/")).toBe(true);
       expect(project.alt.length).toBeGreaterThan(20);
+      expect(project.capabilities.length).toBeGreaterThanOrEqual(3);
+      expect(project.capabilities.length).toBeLessThanOrEqual(4);
+      expect(project.sections).toHaveLength(10);
     }
   });
 

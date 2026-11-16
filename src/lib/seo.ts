@@ -1,26 +1,30 @@
 import type { Metadata } from "next";
-import { company } from "@/config/company";
+import { company, partnershipSummary } from "@/config/company";
 
-const defaultDescription =
-  "OccasionFun Ltd is a UK-registered company that identifies technology project opportunities, leads bidding and coordinates delivery. Technical work is carried out by DGV Group, a separate India-registered company under common ownership.";
+const defaultDescription = partnershipSummary;
 
 export function createPageMetadata({
   title,
   description = defaultDescription,
   path = "/",
   indexable = true,
+  image,
 }: {
   title: string;
   description?: string;
   path?: string;
   /** Draft legal pages stay public but are omitted from search indexes. */
   indexable?: boolean;
+  /** Path under the site, such as a case-study preview. No external URLs. */
+  image?: string;
 }): Metadata {
-  const url = new URL(path, company.siteUrl).toString();
+  const canonicalPath = path === "/" ? "/" : `${path.replace(/\/$/, "")}/`;
+  const url = new URL(canonicalPath, company.siteUrl).toString();
   const fullTitle =
     title === company.legalName
       ? `${company.legalName} | Technology services`
       : `${title} | ${company.legalName}`;
+  const images = image ? [image] : undefined;
 
   return {
     title: fullTitle,
@@ -35,11 +39,13 @@ export function createPageMetadata({
       siteName: company.legalName,
       locale: "en_GB",
       type: "website",
+      images,
     },
     twitter: {
       card: "summary_large_image",
       title: fullTitle,
       description,
+      images,
     },
     robots: {
       index: indexable,

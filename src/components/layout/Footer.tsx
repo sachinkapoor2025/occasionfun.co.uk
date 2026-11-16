@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { company, displayOrPending } from "@/config/company";
+import { company, partnershipShort } from "@/config/company";
 import { companyNav, footerExplore, legalNav } from "@/config/navigation";
 import { Container } from "@/components/ui/Container";
 
@@ -22,10 +22,8 @@ export function Footer() {
               </span>
             </Link>
             <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-300">
-              UK-registered company for technology project opportunities,
-              bidding and project coordination. Technical delivery is provided
-              by DGV Group, a separate India-registered company under common
-              ownership.
+              {partnershipShort} The companies are separate legal entities
+              under common ownership and work under a signed agreement.
             </p>
             <dl className="mt-6 space-y-2 text-sm">
               <div>
@@ -33,30 +31,31 @@ export function Footer() {
                 <dd className="inline">{company.companyNumber}</dd>
               </div>
               <div>
-                <dt className="inline font-semibold text-white">Registered office: </dt>
-                <dd className="inline">
-                  {displayOrPending(
-                    company.registeredOffice,
-                    "Pending verification",
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="inline font-semibold text-white">Email: </dt>
-                <dd className="inline">
-                  {displayOrPending(
-                    company.businessEmail,
-                    "Pending approval",
-                  )}
-                </dd>
+                <dt className="inline font-semibold text-white">Address: </dt>
+                <dd className="inline">{company.businessAddress}</dd>
               </div>
               <div>
                 <dt className="inline font-semibold text-white">Telephone: </dt>
                 <dd className="inline">
-                  {displayOrPending(
-                    company.businessPhone,
-                    "Pending approval",
-                  )}
+                  <a
+                    href="tel:+447865576786"
+                    className="hover:text-white"
+                  >
+                    {company.businessPhone}
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt className="inline font-semibold text-white">
+                  Registration and bidding:{" "}
+                </dt>
+                <dd className="inline">
+                  <a
+                    href={`mailto:${company.biddingEmail}`}
+                    className="hover:text-white"
+                  >
+                    {company.biddingEmail}
+                  </a>
                 </dd>
               </div>
             </dl>

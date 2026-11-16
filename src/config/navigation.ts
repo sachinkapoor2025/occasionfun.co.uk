@@ -1,6 +1,6 @@
 export const companyNav = [
   { href: "/about", label: "About OccasionFun" },
-  { href: "/technology-partner", label: "Technology Partner — DGV Group" },
+  { href: "/technology-partner", label: "Technology Partner — DGV" },
   { href: "/how-we-work", label: "How We Work" },
 ] as const;
 

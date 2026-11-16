@@ -6,6 +6,8 @@ import { CTABanner } from "@/components/ui/CTABanner";
 import { Container } from "@/components/ui/Container";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
+import { partnershipShort } from "@/config/company";
+import { caseStudies } from "@/content/case-studies";
 import {
   getAllServiceSlugs,
   getRelatedServices,
@@ -141,6 +143,46 @@ export default async function ServiceDetailPage({ params }: ServicePageProps) {
         <p className="max-w-3xl text-base leading-relaxed text-slate-600">
           {service.securityNotes}
         </p>
+      </Section>
+
+      <Section title="How this work is delivered">
+        <p className="max-w-3xl text-base leading-relaxed text-slate-600">
+          {partnershipShort} OccasionFun coordinates the client engagement and
+          supports delivery. DGV provides the engineering and technical delivery
+          for the client.
+        </p>
+        {service.slug === "software-development" ? (
+          <div className="mt-6 max-w-3xl">
+            <p className="text-sm leading-relaxed text-slate-600">
+              Four selected platforms are written up as case studies. They are
+              custom software, not WordPress sites.
+            </p>
+            <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+              {caseStudies.map((study) => (
+                <li key={study.slug}>
+                  <Link
+                    href={`/our-work/${study.slug}`}
+                    className="font-semibold text-accent hover:text-accent-hover"
+                  >
+                    {study.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {service.slug === "cloud-aws-devops" ? (
+          <p className="mt-6 max-w-3xl text-sm leading-relaxed text-slate-600">
+            <Link
+              href="/our-work"
+              className="font-semibold text-accent hover:text-accent-hover"
+            >
+              Our work
+            </Link>{" "}
+            describes platforms delivered with AWS services. Scope is still
+            agreed for each engagement.
+          </p>
+        ) : null}
       </Section>
 
       <Section

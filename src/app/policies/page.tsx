@@ -9,7 +9,7 @@ import { createPageMetadata } from "@/lib/seo";
 export const metadata = createPageMetadata({
   title: "Policies and supplier documents",
   description:
-    "Document library for OCCASIONFUN LTD policies and supplier documents. Only approved materials are published; others are available on request or pending.",
+    "Draft document library for OCCASIONFUN LTD. The website notices are in preparation and are not approved for use.",
   path: "/policies",
   indexable: false,
 });
@@ -20,14 +20,14 @@ export default function PoliciesPage() {
       <PageHeader
         eyebrow="Policies"
         title="Policies and supplier documents"
-        description="This library shows documents that are approved for publication, available on request, or not yet available. We do not auto-generate legal policies and present them as legally reviewed."
+        description="The privacy, cookie and terms notices linked here are drafts in preparation. They are not approved for use. Other documents are on request or not yet available."
       />
 
       <Section>
         <ReviewWarning>
-          Pre-launch checklist: every policy marked published must be legally
-          reviewed and company-approved before public launch reliance. Do not
-          treat draft website pages as final policy instruments.
+          The privacy, cookie and terms notices are drafts in preparation. They
+          require legal review and company approval before they are relied on.
+          Do not treat these pages as final policy instruments.
         </ReviewWarning>
         <DocumentList documents={policyDocuments} />
       </Section>

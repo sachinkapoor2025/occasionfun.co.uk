@@ -3,6 +3,7 @@ import { CTABanner } from "@/components/ui/CTABanner";
 import { Container } from "@/components/ui/Container";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ServiceCatalogue } from "@/components/ui/ServiceCatalogue";
+import { partnershipShort } from "@/config/company";
 import { createPageMetadata } from "@/lib/seo";
 
 export const metadata = createPageMetadata({
@@ -24,8 +25,14 @@ export default function ServicesPage() {
       <section className="bg-role-primary py-10 sm:py-12">
         <Container>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-600">
-            OccasionFun coordinates the engagement. How the work is split with
-            DGV Group is explained on the{" "}
+            {partnershipShort} Selected platforms are described in{" "}
+            <Link
+              href="/our-work"
+              className="font-semibold text-accent hover:text-accent-hover"
+            >
+              our work
+            </Link>
+            . How the companies work together is explained on the{" "}
             <Link
               href="/technology-partner"
               className="font-semibold text-accent hover:text-accent-hover"

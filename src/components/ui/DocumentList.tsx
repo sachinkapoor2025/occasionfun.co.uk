@@ -2,13 +2,13 @@ import Link from "next/link";
 import type { PolicyDocument } from "@/content/policies";
 
 const statusLabel: Record<PolicyDocument["status"], string> = {
-  published: "Available",
+  published: "Draft",
   "available-on-request": "Available on request",
   "not-yet-available": "Not yet available",
 };
 
 const statusClass: Record<PolicyDocument["status"], string> = {
-  published: "bg-accent-soft text-accent",
+  published: "bg-slate-100 text-slate-700",
   "available-on-request": "bg-slate-100 text-slate-700",
   "not-yet-available": "bg-slate-100 text-slate-500",
 };
@@ -22,7 +22,7 @@ export function DocumentList({ documents }: { documents: PolicyDocument[] }) {
           className="flex flex-col gap-3 py-5 sm:flex-row sm:items-start sm:justify-between"
         >
           <div className="max-w-2xl">
-            <h3 className="text-lg text-navy-900">{doc.title}</h3>
+            <h2 className="text-lg text-navy-900">{doc.title}</h2>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
               {doc.description}
             </p>

@@ -3,7 +3,7 @@ import { CTABanner } from "@/components/ui/CTABanner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { SupplierInfoPanel } from "@/components/ui/SupplierInfoPanel";
-import { company, displayOrPending } from "@/config/company";
+import { company } from "@/config/company";
 import { getServiceBySlug, serviceGroups } from "@/content/services";
 import { createPageMetadata } from "@/lib/seo";
 
@@ -37,13 +37,8 @@ export default function PublicSectorPage() {
             ["Legal name", company.legalName],
             ["Company number", company.companyNumber],
             ["Jurisdiction", company.jurisdiction],
-            [
-              "Registered office",
-              displayOrPending(
-                company.registeredOffice,
-                "To be inserted after verification",
-              ),
-            ],
+            ["Address", company.businessAddress],
+            ["Registered office", "Not published on this website."],
           ].map(([label, value]) => (
             <div key={label} className="border-t border-slate-200 pt-4">
               <dt className="text-sm font-semibold text-navy-900">{label}</dt>
@@ -102,26 +97,26 @@ export default function PublicSectorPage() {
           <article>
             <h3 className="text-xl text-navy-900">OccasionFun Ltd</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              The UK-registered company that identifies the opportunity, takes
-              part in the bid and coordinates the engagement. Company number{" "}
-              {company.companyNumber}.
+              The UK technology services company that engages the buyer, gathers
+              the requirement, takes part in the bid and coordinates the
+              project. Company number {company.companyNumber}.
             </p>
           </article>
           <article>
-            <h3 className="text-xl text-navy-900">DGV Group</h3>
+            <h3 className="text-xl text-navy-900">DGV</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              A separate India-registered company under common ownership. DGV
-              Group provides technical planning, architecture, development,
-              design, testing and implementation. It is not an unrelated
-              supplier and not the same legal entity as OccasionFun.
+              Divit Global Ventures (DGV) is a technology delivery company and
+              a separate legal entity under common ownership. Under a signed
+              agreement, DGV designs, develops and delivers IT solutions and
+              digital platforms for clients.
             </p>
           </article>
         </div>
         <p className="mt-6 max-w-3xl text-sm leading-relaxed text-slate-600">
           Where a tender asks about delivery location, access to systems or
-          data, or the role of DGV Group, that is answered for the specific
+          data, or the role of DGV, that is answered for the specific
           requirement. Access from outside the UK is not assumed to be
-          acceptable.           See the{" "}
+          acceptable. See the{" "}
           <Link
             href="/technology-partner"
             className="font-semibold text-accent hover:text-accent-hover"
@@ -134,34 +129,24 @@ export default function PublicSectorPage() {
 
       <Section title="UK engagement">
         <p className="max-w-3xl text-base leading-relaxed text-slate-600">
-          A UK business representative is physically available in the UK, and a
-          UK-based IT professional forms part of the current operating setup.
-          Named contact details, roles and availability will be published only
-          after the company supplies and approves them.
+          {company.ukRepresentativeName}, {company.ukRepresentativeRole}, is
+          the UK representative for business engagement and client coordination.
         </p>
         <dl className="mt-6 grid gap-4 sm:grid-cols-2">
           <div className="border-t border-slate-200 pt-4">
             <dt className="text-sm font-semibold text-navy-900">
-              UK business representative
+              UK representative
             </dt>
             <dd className="mt-1 text-sm text-slate-600">
-              {displayOrPending(
-                company.ukRepresentativeName,
-                "Name pending approval",
-              )}
-              {" · "}
-              {displayOrPending(
-                company.ukRepresentativeRole,
-                "Role pending approval",
-              )}
+              {company.ukRepresentativeName} — {company.ukRepresentativeRole}
             </dd>
           </div>
           <div className="border-t border-slate-200 pt-4">
-            <dt className="text-sm font-semibold text-navy-900">
-              UK IT professional
-            </dt>
+            <dt className="text-sm font-semibold text-navy-900">Telephone</dt>
             <dd className="mt-1 text-sm text-slate-600">
-              {company.ukItProfessionalNote}
+              <a href="tel:+447865576786" className="font-medium text-accent">
+                {company.businessPhone}
+              </a>
             </dd>
           </div>
         </dl>

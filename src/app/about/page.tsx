@@ -3,32 +3,32 @@ import { ButtonLink } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
-import { company } from "@/config/company";
+import { company, partnershipSummary } from "@/config/company";
 import { createPageMetadata } from "@/lib/seo";
 
 export const metadata = createPageMetadata({
   title: "About us",
   description:
-    "OccasionFun Ltd is the UK company that finds a technology opportunity, takes part in the bid, and coordinates the project.",
+    "OccasionFun Ltd is a UK technology services company. It engages clients, gathers requirements and coordinates technology projects with Divit Global Ventures (DGV).",
   path: "/about",
 });
 
 const responsibilities = [
   {
-    title: "Opportunity identification",
-    text: "OccasionFun looks for technology projects that fit the work the companies can take on, across commercial clients, public-sector buyers and prime contractors.",
+    title: "Client engagement",
+    text: "OccasionFun engages UK businesses, public-sector buyers and prime contractors, and keeps the client conversation.",
   },
   {
-    title: "Bidding",
-    text: "OccasionFun prepares the response: the fit, the scope and the way the project would be coordinated.",
-  },
-  {
-    title: "Business engagement",
-    text: `Clients and buyers deal with OccasionFun Ltd, company number ${company.companyNumber}, for the relationship and the project conversation.`,
+    title: "Requirements and bidding",
+    text: "OccasionFun gathers requirements, assesses fit and prepares the bid or proposal.",
   },
   {
     title: "Project coordination",
-    text: "OccasionFun keeps scope, communication and handover together.",
+    text: "OccasionFun coordinates scope, communication and handover, and supports delivery of the technology project.",
+  },
+  {
+    title: "The UK company",
+    text: `Clients deal with OccasionFun Ltd, company number ${company.companyNumber}, for the relationship and the project conversation.`,
   },
 ];
 
@@ -37,8 +37,8 @@ export default function AboutPage() {
     <>
       <PageHeader
         eyebrow="About us"
-        title="OccasionFun Ltd coordinates technology projects from the UK."
-        description={`OccasionFun Ltd is the UK company that finds a technology opportunity, takes part in the bid, and coordinates the project. ${company.legalName} is registered in the ${company.jurisdiction}, company number ${company.companyNumber}.`}
+        title="A UK technology services company."
+        description={`${partnershipSummary} ${company.legalName} is registered in the ${company.jurisdiction}, company number ${company.companyNumber}.`}
       />
 
       <Section
@@ -83,14 +83,14 @@ export default function AboutPage() {
       <Section
         tone="muted"
         title="Technical delivery"
-        description="DGV Group is the separate company that does the technical work. That relationship is explained on the Technology Partner page."
+        description="DGV is OccasionFun's technology delivery partner. DGV provides IT services, software development, application engineering and technical project delivery for clients."
       >
         <p className="max-w-3xl text-sm leading-relaxed text-slate-600">
           <Link
             href="/technology-partner"
             className="font-semibold text-accent hover:text-accent-hover"
           >
-            Technology Partner — DGV Group
+            Technology Partner — DGV
           </Link>
         </p>
       </Section>

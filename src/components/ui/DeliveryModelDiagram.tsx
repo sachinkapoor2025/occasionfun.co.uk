@@ -9,7 +9,7 @@ const steps = [
   },
   {
     title: "Technical delivery",
-    text: "DGV Group plans, designs, builds, tests and implements the agreed technical work.",
+    text: "DGV designs, develops and delivers the digital platform or software for the client.",
   },
   {
     title: "Handover",
@@ -43,10 +43,10 @@ export function DeliveryModelDiagram() {
         ))}
       </ol>
       <p className="mt-6 text-xs leading-relaxed text-slate-500">
-        OccasionFun Ltd and DGV Group are separate companies under common
-        ownership. This is a summary of how they connect. It is not the full
-        project lifecycle, not a contract, and not a certified management
-        system.
+        OccasionFun Ltd and DGV are separate legal entities under common
+        ownership. DGV is the technology partner under a signed agreement.
+        This is a summary of how they connect. It is not the agreement and
+        not a certified management system.
       </p>
     </div>
   );

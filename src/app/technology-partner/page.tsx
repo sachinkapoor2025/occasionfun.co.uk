@@ -3,28 +3,28 @@ import { CTABanner } from "@/components/ui/CTABanner";
 import { DeliveryModelDiagram } from "@/components/ui/DeliveryModelDiagram";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
-import { company } from "@/config/company";
+import { company, partnershipSummary } from "@/config/company";
 import { createPageMetadata } from "@/lib/seo";
 
 export const metadata = createPageMetadata({
-  title: "OccasionFun and DGV Group",
+  title: "OccasionFun and Divit Global Ventures",
   description:
-    "OccasionFun Ltd and DGV Group are separate companies under common ownership. OccasionFun coordinates projects. DGV Group provides the technical delivery.",
+    "Divit Global Ventures (DGV) is OccasionFun's technology delivery partner. The companies are separate legal entities under common ownership and work under a signed agreement.",
   path: "/technology-partner",
 });
 
 const occasionFunRole = [
-  "Identifying project opportunities",
-  "Bidding and proposals",
-  "Business engagement with the client or buyer",
-  "Project coordination through to handover",
+  "UK client engagement and communication",
+  "Requirements gathering and bidding",
+  "Project coordination",
+  "Support for technology delivery",
 ];
 
 const dgvRole = [
-  "Technical planning and architecture",
-  "Design and development",
-  "Testing",
-  "Implementation and related technical work",
+  "IT services and software development",
+  "Application engineering",
+  "Design and development of digital platforms",
+  "Technical project delivery for clients",
 ];
 
 export default function TechnologyPartnerPage() {
@@ -32,8 +32,8 @@ export default function TechnologyPartnerPage() {
     <>
       <PageHeader
         eyebrow="Technology partner"
-        title="Two companies. OccasionFun coordinates, and DGV Group builds."
-        description={`${company.legalName} and DGV Group are separate legal entities under common ownership. OccasionFun is the UK company a client deals with. DGV Group is the India-registered company that carries out the technical work.`}
+        title="Two companies. OccasionFun coordinates. DGV delivers the technology."
+        description={partnershipSummary}
       />
 
       <Section title="Who does what">
@@ -44,9 +44,9 @@ export default function TechnologyPartnerPage() {
             </p>
             <h3 className="mt-3 text-2xl text-navy-900">OccasionFun Ltd</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              Company number {company.companyNumber}. OccasionFun identifies
-              opportunities, takes part in bids and manages the business
-              relationship and project coordination.
+              Company number {company.companyNumber}. A UK technology services
+              company: client engagement, requirements, bidding, coordination
+              and support for delivery.
             </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-700">
               {occasionFunRole.map((item) => (
@@ -56,13 +56,12 @@ export default function TechnologyPartnerPage() {
           </article>
           <article className="rounded-2xl border border-slate-200 bg-white p-6">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
-              India
+              Technology partner
             </p>
-            <h3 className="mt-3 text-2xl text-navy-900">DGV Group</h3>
+            <h3 className="mt-3 text-2xl text-navy-900">DGV</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              A separate India-registered company under the same ownership. DGV
-              Group is the dedicated technical delivery company for agreed
-              work.
+              A technology delivery company. DGV designs, develops and delivers
+              IT solutions and digital platforms for clients.
             </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-700">
               {dgvRole.map((item) => (
@@ -76,7 +75,7 @@ export default function TechnologyPartnerPage() {
       <Section
         tone="muted"
         title="How the relationship supports a project"
-        description="A buyer deals with OccasionFun. When work is agreed, DGV Group carries out the technical delivery and OccasionFun coordinates it. The diagram is a summary of that relationship, not the full lifecycle."
+        description="A buyer deals with OccasionFun for UK client engagement, requirements and project coordination. DGV designs, develops and delivers the IT solution for the client. The diagram is a summary of that relationship, not the agreement."
       >
         <DeliveryModelDiagram />
         <p className="mt-8 max-w-3xl text-sm leading-relaxed text-slate-600">
@@ -87,38 +86,47 @@ export default function TechnologyPartnerPage() {
           >
             How we work
           </Link>
-          . Not every project uses the same stages or the same contract. Where
-          a buyer needs the delivery location, system access or DGV Group’s
-          role explained, that is set out for the requirement. Access from
-          outside the UK is not assumed to be acceptable.
+          . Not every project uses the same stages or the same agreement. Where
+          a buyer needs the delivery location, system access or DGV’s role
+          explained, that is set out for the requirement. Access from outside
+          the UK is not assumed to be acceptable.
         </p>
       </Section>
 
-      <Section title="What this page states, and what it does not">
+      <Section title="Technology partner details">
         <dl className="grid gap-4 sm:grid-cols-2">
           {[
-            ["Name used here", "DGV Group"],
-            ["Where it is registered", "India"],
+            ["Company", `${company.dgvPartnerName} (DGV)`],
+            ["Address", company.dgvPartnerAddress],
+            ["Email", company.dgvPartnerEmail],
+            ["GST", company.dgvGst],
+            ["Partner contact", company.dgvPartnerContact],
             [
               "Relationship",
-              "Separate legal entity under common ownership with OccasionFun Ltd",
-            ],
-            [
-              "Not published here",
-              "DGV Group’s full legal name, company number, registered address and website",
+              "Separate legal entities under common ownership, working under a signed agreement. DGV is the technology delivery partner and delivers technology for clients.",
             ],
           ].map(([label, value]) => (
             <div key={label} className="border-t border-slate-200 pt-4">
               <dt className="text-sm font-semibold text-navy-900">{label}</dt>
               <dd className="mt-1 text-sm leading-relaxed text-slate-600">
-                {value}
+                {label === "Email" ? (
+                  <a
+                    href={`mailto:${value}`}
+                    className="font-medium text-accent hover:text-accent-hover"
+                  >
+                    {value}
+                  </a>
+                ) : (
+                  value
+                )}
               </dd>
             </div>
           ))}
         </dl>
         <p className="mt-8 max-w-3xl text-sm leading-relaxed text-slate-600">
-          This page does not describe either company as a subsidiary, parent or
-          joint venture of the other. Read{" "}
+          The address is the partner’s business address. GST is the partner’s
+          GST identification. Neither is a company registration number, and the
+          address is not shown as a registered office. Read{" "}
           <Link
             href="/about"
             className="font-semibold text-accent hover:text-accent-hover"

@@ -91,9 +91,12 @@ export default function TrustPage() {
       >
         <div className="max-w-3xl space-y-4 text-sm leading-relaxed text-slate-600">
           <p>
-            DGV Group is a separate India-registered company under common
-            ownership. Where its technical delivery involves access to personal
-            data from outside the UK, that access has to be assessed under UK
+            Divit Global Ventures (DGV) is a technology delivery company and a
+            separate legal entity under common ownership with OccasionFun Ltd.
+            The companies work under a signed agreement. DGV designs, develops
+            and delivers technology for clients. Where DGV’s work involves
+            access to personal data from
+            outside the UK, that access has to be assessed under UK
             data-protection law, including whether a restricted transfer arises.
             This page does not claim that a transfer safeguard is already in
             place.
