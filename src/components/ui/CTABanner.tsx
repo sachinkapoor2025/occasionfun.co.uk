@@ -17,14 +17,10 @@ export function CTABanner({
   secondaryLabel?: string;
 }) {
   return (
-    <section className="py-16 sm:py-20">
+    <section className="bg-role-primary py-10 sm:py-12">
       <Container>
-        <div className="relative overflow-hidden rounded-2xl bg-navy-900 px-6 py-10 sm:px-10 sm:py-12 shadow-[var(--shadow-soft)]">
-          <div
-            aria-hidden="true"
-            className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-accent/20 blur-2xl"
-          />
-          <div className="relative max-w-2xl">
+        <div className="rounded-2xl bg-role-emphasis px-6 py-10 sm:px-10 sm:py-12 shadow-[var(--shadow-soft)]">
+          <div className="max-w-2xl">
             <h2 className="text-3xl text-white sm:text-4xl">{title}</h2>
             <p className="mt-4 text-base leading-relaxed text-slate-200">
               {description}

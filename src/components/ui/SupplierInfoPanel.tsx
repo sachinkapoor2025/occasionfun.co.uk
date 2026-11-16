@@ -1,45 +1,54 @@
 import Link from "next/link";
-import { company, displayOrPending } from "@/config/company";
+import type { ReactNode } from "react";
+import { company } from "@/config/company";
 import { services } from "@/content/services";
 import { ButtonLink } from "./Button";
 
 export function SupplierInfoPanel() {
   const serviceCategories = services.map((s) => s.shortTitle).join("; ");
 
-  const rows = [
+  const rows: Array<{ label: string; value: ReactNode }> = [
     { label: "Legal supplier name", value: company.legalName },
     { label: "Company number", value: company.companyNumber },
     { label: "Registration jurisdiction", value: company.jurisdiction },
+    { label: "Address", value: company.businessAddress },
     {
       label: "Registered office",
-      value: displayOrPending(
-        company.registeredOffice,
-        "To be inserted after verification",
-      ),
+      value: "Not published on this website.",
+    },
+    { label: "Telephone", value: company.businessPhone },
+    {
+      label: "UK representative",
+      value: `${company.ukRepresentativeName}, ${company.ukRepresentativeRole}`,
     },
     {
-      label: "Primary contact",
-      value: displayOrPending(
-        company.businessEmail,
-        "To be inserted after approval",
-      ),
-    },
-    {
-      label: "UK business representative",
-      value: displayOrPending(
-        company.ukRepresentativeName,
-        "Details to be inserted after approval",
+      label: "Registration and bidding enquiries",
+      value: (
+        <>
+          <a
+            href={`mailto:${company.biddingEmail}`}
+            className="font-medium text-accent underline-offset-2 hover:underline"
+          >
+            {company.biddingEmail}
+          </a>
+          <span className="mt-1 block">
+            Registration and bidding correspondence only. General enquiries use
+            the contact form. The form does not send notifications to this
+            address.
+          </span>
+        </>
       ),
     },
     { label: "Main service categories", value: serviceCategories },
     {
       label: "Technology partner",
-      value: `${company.dgvDisplayName} (full legal entity details to be verified)`,
+      value:
+        "Divit Global Ventures (DGV), a technology delivery company and separate legal entity under common ownership. DGV provides IT services, software development and technical project delivery for clients under a signed agreement.",
     },
     {
-      label: "Subcontracting",
+      label: "Delivery arrangement",
       value:
-        "Project-specific and disclosed in accordance with tender and contract terms",
+        "OccasionFun handles UK client engagement, requirements, bidding, coordination and client communication, and supports delivery. DGV designs, develops and delivers the technology for clients.",
     },
   ];
 

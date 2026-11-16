@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { CTABanner } from "@/components/ui/CTABanner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { SupplierInfoPanel } from "@/components/ui/SupplierInfoPanel";
-import { company, displayOrPending } from "@/config/company";
-import { services } from "@/content/services";
+import { company } from "@/config/company";
+import { getServiceBySlug, serviceGroups } from "@/content/services";
 import { createPageMetadata } from "@/lib/seo";
 
 export const metadata = createPageMetadata({
@@ -36,13 +37,8 @@ export default function PublicSectorPage() {
             ["Legal name", company.legalName],
             ["Company number", company.companyNumber],
             ["Jurisdiction", company.jurisdiction],
-            [
-              "Registered office",
-              displayOrPending(
-                company.registeredOffice,
-                "To be inserted after verification",
-              ),
-            ],
+            ["Address", company.businessAddress],
+            ["Registered office", "Not published on this website."],
           ].map(([label, value]) => (
             <div key={label} className="border-t border-slate-200 pt-4">
               <dt className="text-sm font-semibold text-navy-900">{label}</dt>
@@ -54,76 +50,103 @@ export default function PublicSectorPage() {
 
       <Section
         title="Service categories mapped to common IT needs"
-        description="A concise view of how our capabilities relate to typical technology procurements."
+        description="Names only, in the same groups as the services catalogue. The scope of each one is explained on its own page."
       >
         <ul className="grid gap-3 sm:grid-cols-2">
-          {services.map((service) => (
-            <li
-              key={service.slug}
-              className="border-l-2 border-accent/40 pl-4 text-sm text-slate-700"
-            >
-              <span className="font-semibold text-navy-900">{service.title}</span>
-              <span className="block mt-1 text-slate-600">{service.summary}</span>
-            </li>
-          ))}
+          {serviceGroups.flatMap((group) =>
+            group.slugs.flatMap((slug) => {
+              const service = getServiceBySlug(slug);
+              if (!service) return [];
+              return [
+                <li
+                  key={service.slug}
+                  className="border-l-2 border-accent/40 pl-4 text-sm text-slate-700"
+                >
+                  <Link
+                    href={`/services/${service.slug}`}
+                    className="font-semibold text-navy-900 hover:text-accent"
+                  >
+                    {service.title}
+                  </Link>
+                  <span className="mt-1 block text-slate-600">
+                    {service.cardText}
+                  </span>
+                </li>,
+              ];
+            }),
+          )}
         </ul>
+        <p className="mt-6 text-sm text-slate-600">
+          The grouped catalogue is on the{" "}
+          <Link
+            href="/services"
+            className="font-semibold text-accent hover:text-accent-hover"
+          >
+            services
+          </Link>{" "}
+          page.
+        </p>
       </Section>
 
       <Section
         tone="muted"
-        title="Delivery model and subcontracting transparency"
+        title="Who bids, and who delivers"
+        description="The same two-company model applies to a public-sector or prime-contractor opportunity. It is explained for the requirement in front of the buyer. No framework approval, contract history or certification is claimed here."
       >
         <div className="grid gap-6 lg:grid-cols-2">
           <article>
-            <h3 className="text-xl text-navy-900">Supplier-facing company</h3>
+            <h3 className="text-xl text-navy-900">OccasionFun Ltd</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              {company.legalName} is the contracting-facing supplier.
-              Technology partner {company.dgvDisplayName} may provide
-              specialist engineering delivery where disclosed and permitted.
+              The UK technology services company that engages the buyer, gathers
+              the requirement, takes part in the bid and coordinates the
+              project. Company number {company.companyNumber}.
             </p>
           </article>
           <article>
-            <h3 className="text-xl text-navy-900">What we disclose</h3>
+            <h3 className="text-xl text-navy-900">DGV</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              Subcontractors, delivery locations, access to systems and data,
-              and responsibilities are disclosed in line with tender and
-              contract requirements. Overseas delivery or access is never
-              assumed to be automatically acceptable.
+              Divit Global Ventures (DGV) is a technology delivery company and
+              a separate legal entity under common ownership. Under a signed
+              agreement, DGV designs, develops and delivers IT solutions and
+              digital platforms for clients.
             </p>
           </article>
         </div>
+        <p className="mt-6 max-w-3xl text-sm leading-relaxed text-slate-600">
+          Where a tender asks about delivery location, access to systems or
+          data, or the role of DGV, that is answered for the specific
+          requirement. Access from outside the UK is not assumed to be
+          acceptable. See the{" "}
+          <Link
+            href="/technology-partner"
+            className="font-semibold text-accent hover:text-accent-hover"
+          >
+            technology partner
+          </Link>{" "}
+          page for the responsibilities of each company.
+        </p>
       </Section>
 
       <Section title="UK engagement">
         <p className="max-w-3xl text-base leading-relaxed text-slate-600">
-          A UK business representative is physically available in the UK, and a
-          UK-based IT professional forms part of the current operating setup.
-          Named contact details, roles and availability will be published only
-          after the company supplies and approves them.
+          {company.ukRepresentativeName}, {company.ukRepresentativeRole}, is
+          the UK representative for business engagement and client coordination.
         </p>
         <dl className="mt-6 grid gap-4 sm:grid-cols-2">
           <div className="border-t border-slate-200 pt-4">
             <dt className="text-sm font-semibold text-navy-900">
-              UK business representative
+              UK representative
             </dt>
             <dd className="mt-1 text-sm text-slate-600">
-              {displayOrPending(
-                company.ukRepresentativeName,
-                "Name pending approval",
-              )}
-              {" · "}
-              {displayOrPending(
-                company.ukRepresentativeRole,
-                "Role pending approval",
-              )}
+              {company.ukRepresentativeName} — {company.ukRepresentativeRole}
             </dd>
           </div>
           <div className="border-t border-slate-200 pt-4">
-            <dt className="text-sm font-semibold text-navy-900">
-              UK IT professional
-            </dt>
+            <dt className="text-sm font-semibold text-navy-900">Telephone</dt>
             <dd className="mt-1 text-sm text-slate-600">
-              {company.ukItProfessionalNote}
+              <a href={company.businessPhoneTel} className="font-medium text-accent">
+                {company.businessPhone}
+              </a>
             </dd>
           </div>
         </dl>

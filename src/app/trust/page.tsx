@@ -91,11 +91,15 @@ export default function TrustPage() {
       >
         <div className="max-w-3xl space-y-4 text-sm leading-relaxed text-slate-600">
           <p>
-            Where {company.dgvDisplayName} or another overseas partner may access
-            personal data from outside the UK, the parties must assess whether
-            this constitutes a restricted international transfer and implement
-            the applicable UK GDPR transfer mechanism and risk assessment where
-            required.
+            Divit Global Ventures (DGV) is a technology delivery company and a
+            separate legal entity under common ownership with OccasionFun Ltd.
+            The companies work under a signed agreement. DGV designs, develops
+            and delivers technology for clients. Where DGV’s work involves
+            access to personal data from
+            outside the UK, that access has to be assessed under UK
+            data-protection law, including whether a restricted transfer arises.
+            This page does not claim that a transfer safeguard is already in
+            place.
           </p>
           <p>
             We do not claim that an IDTA, UK Addendum, Transfer Risk Assessment,

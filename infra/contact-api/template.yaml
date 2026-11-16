@@ -113,7 +113,7 @@ Resources:
           LEADS_TABLE_NAME: !Ref LeadsTable
           SMTP_SECRET_ARN: !Ref SmtpSecretArn
           SMTP_FROM: enquiries@occasionfun.co.uk
-          SMTP_TO: dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk
+          SMTP_TO: dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk,bids@occasionfun.co.uk
           NOTIFICATION_SUBJECT_PREFIX: !If [IsProduction, "[PROD]", "[DEMO]"]
           LEAD_RETENTION_DAYS: "365"
       Policies:
@@ -150,7 +150,7 @@ Resources:
           LEADS_TABLE_NAME: !Ref LeadsTable
           SMTP_SECRET_ARN: !Ref SmtpSecretArn
           SMTP_FROM: enquiries@occasionfun.co.uk
-          SMTP_TO: dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk
+          SMTP_TO: dgv@mydgv.com,priya.yadav@mydgv.com,nitin.bhatt@mydgv.com,prashant@occasionfun.co.uk,bids@occasionfun.co.uk
           NOTIFICATION_SUBJECT_PREFIX: !If [IsProduction, "[PROD]", "[DEMO]"]
           LEAD_RETENTION_DAYS: "365"
       Policies:

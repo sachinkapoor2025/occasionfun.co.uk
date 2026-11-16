@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { enquiryTypes, type EnquiryType } from "@/config/company";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +22,14 @@ type FormState = {
   companyWebsite: string;
 };
 
+type SubmissionStatus =
+  | "idle"
+  | "submitting"
+  | "success"
+  | "processing"
+  | "pending"
+  | "error";
+
 const initialState: FormState = {
   name: "",
   organisation: "",
@@ -32,9 +41,17 @@ const initialState: FormState = {
   companyWebsite: "",
 };
 
+function fieldClass(invalid: boolean) {
+  return [
+    "mt-2 w-full rounded-md border bg-white px-3 py-2.5 text-sm text-navy-900 shadow-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30",
+    invalid ? "border-error" : "border-slate-200",
+  ].join(" ");
+}
+
 export function ContactForm() {
   const searchParams = useSearchParams();
   const presetEnquiry = searchParams.get("enquiryType");
+  const statusRef = useRef<HTMLDivElement>(null);
 
   const startingState = useMemo<FormState>(() => {
     if (
@@ -48,17 +65,31 @@ export function ContactForm() {
 
   const [form, setForm] = useState<FormState>(startingState);
   const [errors, setErrors] = useState<ContactFormErrors>({});
-  const [status, setStatus] = useState<
-    "idle" | "submitting" | "success" | "processing" | "pending" | "error"
-  >("idle");
+  const [status, setStatus] = useState<SubmissionStatus>("idle");
   const [statusMessage, setStatusMessage] = useState("");
+  const [suppressLive, setSuppressLive] = useState(false);
+
+  useEffect(() => {
+    if (!suppressLive) return;
+    if (status === "idle" || status === "submitting") return;
+    statusRef.current?.focus();
+    const frame = window.requestAnimationFrame(() => setSuppressLive(false));
+    return () => window.cancelAnimationFrame(frame);
+  }, [suppressLive, status]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function reportStatus(next: Exclude<SubmissionStatus, "idle" | "submitting">, message: string) {
+    setSuppressLive(true);
+    setStatus(next);
+    setStatusMessage(message);
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSuppressLive(false);
     setStatus("submitting");
     setErrors({});
     setStatusMessage("");
@@ -66,23 +97,21 @@ export function ContactForm() {
     const parsed = contactFormSchema.safeParse(form);
     if (!parsed.success) {
       setErrors(formatZodErrors(parsed.error));
-      setStatus("error");
-      setStatusMessage("Please correct the highlighted fields.");
+      reportStatus("error", "Please correct the highlighted fields.");
       return;
     }
 
     // Honeypot filled — pretend success without sending.
     if (parsed.data.companyWebsite) {
-      setStatus("success");
-      setStatusMessage("Thank you. Your enquiry has been received.");
       setForm(initialState);
+      reportStatus("success", "Thank you. Your enquiry has been received.");
       return;
     }
 
     const endpoint = process.env.NEXT_PUBLIC_CONTACT_ENDPOINT;
     if (!endpoint) {
-      setStatus("error");
-      setStatusMessage(
+      reportStatus(
+        "error",
         "The contact service is not configured. Your enquiry was not sent.",
       );
       return;
@@ -110,57 +139,61 @@ export function ContactForm() {
 
       if (!saved) {
         setErrors(payload.errors ?? {});
-        setStatus("error");
-        setStatusMessage(
+        reportStatus(
+          "error",
           payload.message ?? "We could not save your enquiry. Please try again.",
         );
         return;
       }
 
       if (delivered) {
-        setStatus("success");
-        setStatusMessage(
+        setForm(initialState);
+        reportStatus(
+          "success",
           payload.message ??
             "Thank you. Your enquiry has been received and will be reviewed.",
         );
-        setForm(initialState);
         return;
       }
 
       if (payload.notification === "sending") {
-        setStatus("processing");
-        setStatusMessage(
+        reportStatus(
+          "processing",
           payload.message ??
             "Your enquiry was saved. Notification is already being processed.",
         );
         return;
       }
 
-      setStatus("pending");
-      setStatusMessage(
+      reportStatus(
+        "pending",
         payload.message ??
           "Your enquiry was saved. The notification email is delayed and will be retried.",
       );
     } catch {
-      setStatus("error");
-      setStatusMessage(
+      reportStatus(
+        "error",
         "A network error occurred. Please try again in a moment.",
       );
     }
   }
 
-  const fieldClass =
-    "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm text-navy-900 shadow-sm placeholder:text-slate-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30";
-
   return (
     <form
       onSubmit={onSubmit}
       noValidate
-      className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-[var(--shadow-soft)]"
+      className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8"
       aria-describedby="contact-form-status"
       aria-busy={status === "submitting" || status === "processing"}
     >
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div>
+        <h2 className="text-xl text-navy-900">Send an enquiry</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Fields marked * are required. Phone is optional.
+        </p>
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
         <div>
           <label htmlFor="name" className="text-sm font-semibold text-navy-900">
             Name <span className="text-error">*</span>
@@ -172,7 +205,7 @@ export function ContactForm() {
             required
             value={form.name}
             onChange={(e) => updateField("name", e.target.value)}
-            className={fieldClass}
+            className={fieldClass(Boolean(errors.name))}
             aria-invalid={Boolean(errors.name)}
             aria-describedby={errors.name ? "name-error" : undefined}
           />
@@ -197,7 +230,7 @@ export function ContactForm() {
             required
             value={form.organisation}
             onChange={(e) => updateField("organisation", e.target.value)}
-            className={fieldClass}
+            className={fieldClass(Boolean(errors.organisation))}
             aria-invalid={Boolean(errors.organisation)}
             aria-describedby={errors.organisation ? "organisation-error" : undefined}
           />
@@ -209,7 +242,7 @@ export function ContactForm() {
         </div>
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-6 sm:grid-cols-2">
         <div>
           <label htmlFor="email" className="text-sm font-semibold text-navy-900">
             Work email <span className="text-error">*</span>
@@ -222,7 +255,7 @@ export function ContactForm() {
             required
             value={form.email}
             onChange={(e) => updateField("email", e.target.value)}
-            className={fieldClass}
+            className={fieldClass(Boolean(errors.email))}
             aria-invalid={Boolean(errors.email)}
             aria-describedby={errors.email ? "email-error" : undefined}
           />
@@ -244,7 +277,7 @@ export function ContactForm() {
             autoComplete="tel"
             value={form.phone}
             onChange={(e) => updateField("phone", e.target.value)}
-            className={fieldClass}
+            className={fieldClass(Boolean(errors.phone))}
             aria-invalid={Boolean(errors.phone)}
             aria-describedby={errors.phone ? "phone-error" : undefined}
           />
@@ -271,7 +304,7 @@ export function ContactForm() {
           onChange={(e) =>
             updateField("enquiryType", e.target.value as EnquiryType | "")
           }
-          className={fieldClass}
+          className={fieldClass(Boolean(errors.enquiryType))}
           aria-invalid={Boolean(errors.enquiryType)}
           aria-describedby={errors.enquiryType ? "enquiryType-error" : undefined}
         >
@@ -300,10 +333,16 @@ export function ContactForm() {
           rows={6}
           value={form.message}
           onChange={(e) => updateField("message", e.target.value)}
-          className={fieldClass}
+          className={fieldClass(Boolean(errors.message))}
           aria-invalid={Boolean(errors.message)}
-          aria-describedby={errors.message ? "message-error" : undefined}
+          aria-describedby={
+            errors.message ? "message-hint message-error" : "message-hint"
+          }
         />
+        <p id="message-hint" className="mt-2 text-sm leading-relaxed text-slate-600">
+          Include the requirement and any deadline or procurement context you
+          already have.
+        </p>
         {errors.message ? (
           <p id="message-error" className="mt-1 text-sm text-error">
             {errors.message}
@@ -324,39 +363,53 @@ export function ContactForm() {
         />
       </div>
 
-      <div className="flex items-start gap-3">
-        <input
-          id="consent"
-          name="consent"
-          type="checkbox"
-          checked={form.consent}
-          onChange={(e) => updateField("consent", e.target.checked)}
-          className="mt-1 h-4 w-4 rounded border-slate-300 text-accent focus:ring-accent"
-          aria-invalid={Boolean(errors.consent)}
-          aria-describedby={errors.consent ? "consent-error" : undefined}
-        />
-        <label htmlFor="consent" className="text-sm leading-relaxed text-slate-600">
-          I agree that OCCASIONFUN LTD may use the details I provide to respond
-          to this enquiry, in line with the{" "}
-          <a href="/privacy" className="font-semibold text-accent underline-offset-2 hover:underline">
-            privacy notice
-          </a>
-          . <span className="text-error">*</span>
+      <div>
+        <label
+          htmlFor="consent"
+          className="flex cursor-pointer items-start gap-3 rounded-md px-3 py-3 -mx-3"
+        >
+          <input
+            id="consent"
+            name="consent"
+            type="checkbox"
+            checked={form.consent}
+            onChange={(e) => updateField("consent", e.target.checked)}
+            className={`mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300 text-accent focus:outline-none focus:ring-2 focus:ring-accent ${
+              errors.consent ? "border-error ring-1 ring-error" : ""
+            }`}
+            aria-invalid={Boolean(errors.consent)}
+            aria-describedby={errors.consent ? "consent-error" : undefined}
+          />
+          <span className="text-sm leading-relaxed text-slate-600">
+            I agree that OCCASIONFUN LTD may use the details I provide to
+            respond to this enquiry, in line with the privacy notice.{" "}
+            <span className="text-error">*</span>
+          </span>
         </label>
-      </div>
-      {errors.consent ? (
-        <p id="consent-error" className="text-sm text-error">
-          {errors.consent}
+        {errors.consent ? (
+          <p id="consent-error" className="mt-1 text-sm text-error">
+            {errors.consent}
+          </p>
+        ) : null}
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          <Link
+            href="/privacy"
+            className="font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            Privacy notice
+          </Link>
         </p>
-      ) : null}
+      </div>
 
       <div
+        ref={statusRef}
         id="contact-form-status"
+        tabIndex={-1}
         role="status"
-        aria-live="polite"
+        aria-live={suppressLive ? "off" : "polite"}
         aria-atomic="true"
         data-state={status}
-        className={
+        className={`scroll-mt-28 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-accent ${
           status === "success"
             ? "rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-success"
             : status === "error"
@@ -364,14 +417,18 @@ export function ContactForm() {
               : status === "processing" || status === "pending"
                 ? "rounded-md border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-navy-900"
                 : "sr-only"
-        }
+        }`}
       >
         {statusMessage}
       </div>
 
-      <Button type="submit" disabled={status === "submitting"}>
+      <Button type="submit" disabled={status === "submitting"} className="w-full">
         {status === "submitting" ? "Sending…" : "Send enquiry"}
       </Button>
+      <p className="text-sm leading-relaxed text-slate-600">
+        OccasionFun reviews the enquiry. A saved enquiry is not shown as failed
+        if the notification is still being sent.
+      </p>
     </form>
   );
 }

@@ -19,16 +19,16 @@ export function Section({
   tone?: "default" | "muted" | "navy";
 }) {
   const tones = {
-    default: "bg-transparent",
-    muted: "bg-white/70 border-y border-slate-200/80",
-    navy: "bg-navy-900 text-white",
+    default: "bg-role-primary",
+    muted: "bg-role-secondary",
+    navy: "bg-role-emphasis text-white",
   };
 
   return (
-    <section id={id} className={`py-16 sm:py-20 ${tones[tone]} ${className}`}>
+    <section id={id} className={`py-10 sm:py-12 ${tones[tone]} ${className}`}>
       <Container>
         {(eyebrow || title || description) && (
-          <div className={`mb-10 max-w-3xl ${tone === "navy" ? "text-white" : ""}`}>
+          <div className={`mb-6 max-w-3xl ${tone === "navy" ? "text-white" : ""}`}>
             {eyebrow ? (
               <p
                 className={`mb-3 text-xs font-semibold uppercase tracking-[0.18em] ${
