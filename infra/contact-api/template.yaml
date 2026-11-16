@@ -168,9 +168,10 @@ Resources:
                 - secretsmanager:GetSecretValue
               Resource: !Ref SmtpSecretArn
 
-  # The invoke permission for this rule belongs to the separate stack
-  # occasionfun-co-uk-contact-retry-permission. A Schedule event would
-  # make SAM declare that permission again.
+  # Both environments manage this invoke permission in a separate stack:
+  # occasionfun-co-uk-contact-retry-permission for demo and
+  # occasionfun-co-uk-prod-contact-retry-permission for production.
+  # A Schedule event would make SAM declare that permission again.
   ContactRetryFunctionRetrySchedule:
     Type: AWS::Events::Rule
     Properties:

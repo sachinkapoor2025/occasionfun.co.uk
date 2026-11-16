@@ -16,24 +16,6 @@ const PHYSICAL_NAMES = [
   { property: "FunctionName", key: "retryFunction" },
 ];
 
-/**
- * Resolved values of the permission already deployed on
- * occasionfun-co-uk-prod-contact. A Ref or GetAtt makes CloudFormation
- * report a conditional replacement whenever the retry function changes.
- */
-const PRODUCTION_RETRY_FUNCTION_NAME = "occasionfun-co-uk-prod-contact-retry";
-const PRODUCTION_RETRY_SOURCE_ARN =
-  "arn:aws:events:eu-west-2:796174527529:rule/occasionfun-co-uk-prod-contact-retry";
-
-const PRODUCTION_RETRY_PERMISSION = `  ContactRetryFunctionRetrySchedulePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: ${PRODUCTION_RETRY_FUNCTION_NAME}
-      Principal: events.amazonaws.com
-      SourceArn: ${PRODUCTION_RETRY_SOURCE_ARN}
-`;
-
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -91,6 +73,10 @@ export function retrySchedulePermission(template) {
   };
 }
 
+function declaresRetryPermission(template) {
+  return /^ {2}ContactRetryFunctionRetrySchedulePermission:/m.test(template);
+}
+
 function nameProductionRetryRule(template) {
   const name = PRODUCTION.retryRuleName;
   if (name.length > 64 || !name.startsWith("occasionfun-co-uk-prod-contact-")) {
@@ -108,19 +94,11 @@ function nameProductionRetryRule(template) {
   return template.replace(needle, `${needle}      Name: ${name}${ending}`);
 }
 
-function insertProductionPermission(template) {
-  if (/^ {2}ContactRetryFunctionRetrySchedulePermission:/m.test(template)) {
-    throw new Error("The demo template must not declare the retry permission.");
-  }
-  const marker = "  ContactHttpApi:";
-  const index = template.indexOf(marker);
-  if (index === -1) throw new Error("ContactHttpApi was not found.");
-  const block = PRODUCTION_RETRY_PERMISSION.replaceAll("\n", lineEnding(template));
-  return template.slice(0, index) + block + template.slice(index);
-}
-
 export function renderContactTemplate(template, environment) {
   const target = targetForEnvironment(environment);
+  if (declaresRetryPermission(template)) {
+    throw new Error("The application template must not declare the retry permission.");
+  }
   if (/^ +(TableName|LogGroupName|FunctionName):\s*[!{]/m.test(template)) {
     throw new Error(
       "Physical names must be literals. A conditional name can replace an existing demo resource.",
@@ -140,23 +118,6 @@ export function renderContactTemplate(template, environment) {
       rendered = rendered.replace(pattern, `$1${target[key]}`);
     }
     rendered = nameProductionRetryRule(rendered);
-    rendered = insertProductionPermission(rendered);
-    if (
-      PRODUCTION.retryFunction !== PRODUCTION_RETRY_FUNCTION_NAME ||
-      PRODUCTION.retryRuleName !== PRODUCTION_RETRY_FUNCTION_NAME
-    ) {
-      throw new Error("Production retry permission literals do not match the deployed function and rule.");
-    }
-    const permission = resourceBlock(rendered, "ContactRetryFunctionRetrySchedulePermission");
-    if (!permission.includes(`FunctionName: ${PRODUCTION_RETRY_FUNCTION_NAME}`)) {
-      throw new Error("Production retry permission must use the deployed function name.");
-    }
-    if (!permission.includes(`SourceArn: ${PRODUCTION_RETRY_SOURCE_ARN}`)) {
-      throw new Error("Production retry permission must use the deployed rule ARN.");
-    }
-    if (/[!{]|SourceAccount|!Ref|!GetAtt|Fn::/.test(permission)) {
-      throw new Error("Production retry permission must not use a dynamic reference.");
-    }
     if (rendered.includes("GHXjmJNlS8ce") || rendered.includes(`function:${DEMO.retryFunction}`)) {
       throw new Error("Production template still targets the demo retry function or rule.");
     }
@@ -165,6 +126,9 @@ export function renderContactTemplate(template, environment) {
     if (demoPermission.requiresReplacement) {
       throw new Error(`Demo retry schedule is not safe: ${demoPermission.risks.join("; ")}`);
     }
+  }
+  if (declaresRetryPermission(rendered)) {
+    throw new Error("The application template must not declare the retry permission.");
   }
   for (const { property, key } of PHYSICAL_NAMES) {
     if (!propertyLine(property, target[key]).test(rendered)) {
