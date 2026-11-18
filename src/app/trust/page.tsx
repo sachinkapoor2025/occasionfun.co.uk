@@ -129,7 +129,7 @@ export default function TrustPage() {
         primaryHref="/contact?enquiryType=Public-sector%20procurement"
         primaryLabel="Request information"
         secondaryHref="/policies"
-        secondaryLabel="Policy library"
+        secondaryLabel="Company policies"
       />
     </>
   );

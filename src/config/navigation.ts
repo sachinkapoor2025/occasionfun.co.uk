@@ -10,6 +10,7 @@ export const mainNav = [
   { href: "/our-work", label: "Our Work" },
   { href: "/public-sector", label: "Public Sector" },
   { href: "/trust", label: "Trust" },
+  { href: "/policies", label: "Policy" },
   { href: "/contact", label: "Contact" },
 ] as const;
 

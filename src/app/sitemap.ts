@@ -17,6 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/technology-partner/",
     "/how-we-work/",
     "/trust/",
+    "/policies/",
     "/contact/",
   ];
 

@@ -39,8 +39,12 @@ describe("critical routes and content integrity", () => {
       "/our-work",
       "/public-sector",
       "/trust",
+      "/policies",
       "/contact",
     ]);
+    expect(mainNav.find((item) => item.href === "/policies")?.label).toBe(
+      "Policy",
+    );
     expect(companyNav.map((item) => item.href)).toEqual([
       "/about",
       "/technology-partner",
@@ -48,7 +52,7 @@ describe("critical routes and content integrity", () => {
     ]);
   });
 
-  it("keeps legal and policy links in the legal group only", () => {
+  it("keeps the footer policy link in the legal group", () => {
     expect(footerExplore.map((item) => item.href)).not.toContain("/policies");
     expect(legalNav.map((item) => item.href)).toEqual([
       "/privacy",
@@ -73,7 +77,8 @@ describe("critical routes and content integrity", () => {
     expect(urls.some((url) => url.includes("amplifyapp.com"))).toBe(false);
     expect(urls).toContain("https://occasionfun.co.uk/");
     expect(urls).toContain("https://occasionfun.co.uk/our-work/usarakhi/");
-    for (const path of ["/privacy/", "/cookies/", "/terms/", "/policies/"]) {
+    expect(urls).toContain("https://occasionfun.co.uk/policies/");
+    for (const path of ["/privacy/", "/cookies/", "/terms/"]) {
       expect(urls).not.toContain(`https://occasionfun.co.uk${path}`);
     }
   });

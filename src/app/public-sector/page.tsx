@@ -181,7 +181,7 @@ export default function PublicSectorPage() {
         primaryHref="/contact?enquiryType=Public-sector%20procurement"
         primaryLabel="Request supplier information"
         secondaryHref="/policies"
-        secondaryLabel="View policy library"
+        secondaryLabel="View company policies"
       />
     </>
   );
