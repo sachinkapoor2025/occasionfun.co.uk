@@ -40,7 +40,7 @@ Sequence:
 5. Check Amplify app `d2oib89bmco9su`, branch `demo`. If `enableAutoBuild` is already false, leave it unchanged. If it is true, list the visible jobs, wait until a running job belongs to another commit or has no full commit id, disable auto-build for that demo branch only, and read it back with `get-branch`. A job with a missing or short commit id is never treated as this commit. A failed verification stops the job before the backend and frontend run.
 6. Install SAM CLI and Node.js 24, then install frontend, contact API, and admin API dependencies.
 7. Build the contact bundle into `infra/contact-api/dist` and the admin bundle into `infra/admin/dist`. Copy the admin bundle to `infra/contact-api/admin-dist`. Render `template.demo.yaml` and run `sam build` on that file.
-8. Create a CloudFormation change set for `occasionfun-co-uk-contact` with `sam deploy --no-execute-changeset --role-arn arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. The script adds that role on every demo run, including when the caller omits `--role-arn`. A different role ARN is rejected before AWS is called. The parameters are `Environment=demo`, the existing SMTP secret ARN, and the current demo origin list:
+8. Create a CloudFormation change set for `occasionfun-co-uk-contact` with `sam deploy --no-execute-changeset --role-arn arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. The script adds that role on every demo run, including when the caller omits `--role-arn`. A different role ARN is rejected before AWS is called. The parameters are `Environment=demo`, `AdminDeploymentPhase=api`, the existing SMTP secret ARN, and the current demo origin list:
    `https://occasionfun.co.uk`, `https://www.occasionfun.co.uk`, `https://d2oib89bmco9su.amplifyapp.com`, `https://demo.d2oib89bmco9su.amplifyapp.com`.
 9. Write the aggregated change set, including later pages, to a `.json` file and pass that path to `scripts/assert-safe-change-set.mjs`. The checker reads that file. It stops when the file is missing, unreadable, invalid JSON, or has no `Changes` array. An empty `Changes` array is refused. The job deletes the change set and stops when a contact resource would be added, removed, replaced, or conditionally replaced, or when any other addition is not on the demo admin allowlist. Protected contact resources include `LeadsTable`, `ContactFunction`, `ContactRetryFunction`, `ContactHttpApi`, `ContactLogGroup`, and `ContactRetryLogGroup`. The deployment script still creates the change set with `--no-execute-changeset` and executes it only after that check.
 10. Execute the change set only after that check, then wait for the stack update. SAM's `No changes to deploy` message is the only successful path that skips execution.
@@ -53,18 +53,18 @@ The demo stack is not created when it is missing. The workflow does not create o
 
 Every demo change set is created with execution role `arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo`. This repository does not create that role and does not contain its policy. After CloudFormation associates it with `occasionfun-co-uk-contact`, later updates of that stack keep using it. Production passes `arn:aws:iam::796174527529:role/occasionfun-cloudformation-production` and rejects the demo role before AWS is called. The stack name, API `0e6zpkvbkj`, table `occasionfun-co-uk-leads`, endpoint, SMTP secret, and existing physical names stay the same. Contact removals and replacements are still rejected before the change set is executed. An update may add only the explicit demo admin logical IDs.
 
-The automated demo job passes `AdminDeploymentPhase=api` on stack `occasionfun-co-uk-contact`. That keeps the existing pool, client, group, and admin API. Do not change that job to `none`: those resources are conditional, and the pool, client, and group use `DeletionPolicy: Delete`. The two phases below are how the resources were first created. Both manual commands use stack `occasionfun-co-uk-contact`, role `occasionfun-cloudformation-demo`, and `scripts/deploy-contact-stack.sh --no-execute`. That flag creates the change set, runs the guard, and stops. It does not call `execute-change-set`. Do not pass these parameters to `occasionfun-co-uk-prod-contact`.
+Every Demo deployment must pass `AdminDeploymentPhase=api` explicitly on stack `occasionfun-co-uk-contact`. The automated job does. `scripts/assert-deploy-config.mjs` rejects a missing phase, `none`, `identity`, and any other value before AWS is called. `api` keeps the existing pool, client, group, and admin API. Those resources are conditional. The pool, client, and group use `DeletionPolicy: Delete` and `UpdateReplacePolicy: Retain`, so a deployment that removed them would delete them. Do not pass these Demo parameters to `occasionfun-co-uk-prod-contact`. Production must not pass `AdminDeploymentPhase`.
 
-Shared parameter file, with the phase value changed for each step:
+Write `demo-api-parameters.yaml` with the Demo parameters:
 
 ```yaml
 Environment: demo
 SmtpSecretArn: arn:aws:secretsmanager:eu-west-2:796174527529:secret:occasionfun-co-uk/contact/smtp-32Px2G
 AllowedOrigins: "https://occasionfun.co.uk,https://www.occasionfun.co.uk,https://d2oib89bmco9su.amplifyapp.com,https://demo.d2oib89bmco9su.amplifyapp.com"
-AdminDeploymentPhase: identity
+AdminDeploymentPhase: api
 ```
 
-Build once before either phase:
+Build before creating the change set:
 
 ```bash
 npm run build --prefix infra/contact-api
@@ -74,15 +74,13 @@ node scripts/render-contact-template.mjs --environment demo --output infra/conta
 sam build --template template.demo.yaml
 ```
 
-Run the last command in `infra/contact-api`.
-
-Phase 1 sets `AdminDeploymentPhase` to `identity`. The change set may add only `AdminUserPool`, `AdminUserPoolClient`, and `AdminGroup`. The pool is created with `DeletionProtection` INACTIVE. The client and group use `UpdateReplacePolicy: Retain`. No admin Lambda, role, log group, HTTP API, or invoke permission is included.
+Run the last command in `infra/contact-api`. The manual Demo command uses that parameter file, stack `occasionfun-co-uk-contact`, and role `occasionfun-cloudformation-demo`. The script selects that role for Demo and rejects a different role before AWS is called.
 
 ```bash
 bash scripts/deploy-contact-stack.sh \
   --environment demo \
   --stack-name occasionfun-co-uk-contact \
-  --parameters-file phase-identity-parameters.yaml \
+  --parameters-file demo-api-parameters.yaml \
   --allow-create false \
   --no-execute \
   --expected-table occasionfun-co-uk-leads \
@@ -94,20 +92,16 @@ bash scripts/deploy-contact-stack.sh \
   --expected-endpoint https://0e6zpkvbkj.execute-api.eu-west-2.amazonaws.com/contact
 ```
 
-Review the change set before executing it. Contact resources must be absent. If the guard fails, the script deletes the change set. If phase 1 fails after the pool is created, CloudFormation can delete the pool, client, and group because deletion protection is inactive and their `DeletionPolicy` is `Delete`.
+`--no-execute` creates the change set with `sam deploy --no-execute-changeset`, writes it for `scripts/assert-safe-change-set.mjs`, and stops when the check passes. It does not call `execute-change-set`. If the guard fails, the script deletes the unexecuted change set. `No changes to deploy` is the only successful result that leaves no change set. Do not execute a change set whose `AdminUserPool` replacement is `True` or `Conditional`; the guard rejects that change set. The automated Demo job does not pass `--no-execute`, so a change set that passes the guard is executed by that job.
 
-Phase 2 starts only after phase 1 is `UPDATE_COMPLETE`. Set `AdminDeploymentPhase` to `api` and run the same command with that parameter file and `--no-execute`. This update sets `AdminUserPool` deletion protection to ACTIVE in place and adds the authoriser, health Lambda, their roles and log groups, `AdminHttpApi`, its stage `AdminHttpApiApiGatewayDefaultStage`, and the two invoke permissions. The authoriser stays the API default. JWT checks are unchanged.
-
-If phase 2 fails, CloudFormation deletes only the resources that update created. The pool, client, and group already exist, so they stay. `UpdateReplacePolicy: Retain` keeps them if CloudFormation replaces them. Rollback sets deletion protection back to INACTIVE. Do not execute the change set when `AdminUserPool` shows replacement `True` or `Conditional`; the guard rejects that change set. After phase 2 succeeds, deletion protection is ACTIVE.
-
-Executing either reviewed change set is a separate command. The script does not run it when `--no-execute` is set:
+Executing a reviewed change set is a separate command. The command above does not run it:
 
 ```bash
 aws cloudformation execute-change-set --change-set-name CHANGE_SET_ARN --region eu-west-2
 aws cloudformation wait stack-update-complete --stack-name occasionfun-co-uk-contact --region eu-west-2
 ```
 
-`occasionfun-cloudformation-demo` needs permission for the new resources. This repository does not define that policy, so the live role may still lack it. Phase 1 needs `cognito-idp:CreateUserPool`, `CreateUserPoolClient`, `CreateGroup`, the matching describe and get actions, and the matching delete actions for rollback. Phase 2 also needs `cognito-idp:UpdateUserPool`, `iam:CreateRole`, `iam:DeleteRole`, `iam:GetRole`, `iam:PutRolePolicy`, `iam:DeleteRolePolicy`, `iam:PassRole` for `lambda.amazonaws.com`, `lambda:CreateFunction`, `lambda:DeleteFunction`, `lambda:GetFunction`, `lambda:AddPermission`, `lambda:RemovePermission`, `logs:CreateLogGroup`, `logs:DeleteLogGroup`, `logs:PutRetentionPolicy`, and API Gateway v2 create, get, and delete on the new HTTP API. Do not substitute `occasionfun-cloudformation-production`.
+This repository does not define the `occasionfun-cloudformation-demo` policy. Do not substitute `occasionfun-cloudformation-production`.
 
 ### Amplify auto-build
 
@@ -145,6 +139,8 @@ The production stack is `occasionfun-co-uk-prod-contact`. Its parameters are `En
 
 - `https://occasionfun.co.uk`
 - `https://www.occasionfun.co.uk`
+
+Do not pass `AdminDeploymentPhase`. `scripts/assert-deploy-config.mjs` rejects any value of that parameter for Production. Production rendering removes the Demo admin resources, and the production job exits if `AdminUserPool:` remains in the built template.
 
 The production names are `occasionfun-co-uk-prod-contact`, `occasionfun-co-uk-prod-contact-retry`, and `occasionfun-co-uk-prod-leads`, with a new API Gateway and table. `template.yaml` keeps the existing demo names as literals, including `occasionfun-co-uk-contact-retry`. The validate job renders `template.demo.yaml` and `template.production.yaml` and uploads those files. The demo job downloads `template.demo.yaml` and does not render again. The production job downloads `template.production.yaml` and does not render again. Neither template uses a condition for a table name, log group name, or Lambda function name, and neither sets `SourceAccount`. The demo retry rule does not set `Name`, because the existing demo rule already has a generated name. Production rendering sets `Name` to `occasionfun-co-uk-prod-contact-retry`. CloudFormation otherwise shortens the generated rule name below `occasionfun-co-uk-prod-contact-`, which the production execution role is not allowed to describe.
 
@@ -205,6 +201,7 @@ Region for every AWS step: `eu-west-2`.
 | DynamoDB | `occasionfun-co-uk-leads` | `occasionfun-co-uk-prod-leads` |
 | SMTP secret | `occasionfun-co-uk/contact/smtp` | The same secret |
 | Subject prefix | `[DEMO]` | `[PROD]` |
+| Admin deployment phase | `api`, required | Must not be passed |
 | Website | `https://demo.d2oib89bmco9su.amplifyapp.com` | `https://occasionfun.co.uk` after DNS is approved |
 
 ## Smoke tests

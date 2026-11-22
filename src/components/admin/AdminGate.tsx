@@ -13,8 +13,10 @@ import {
 } from "@/lib/admin/auth";
 import { AuthCard } from "./AuthCard";
 
-export const UNAUTHORISED_ADMIN_MESSAGE =
-  "Your account has been created successfully, but you have not yet been authorised to access the Admin Panel. Please contact the administrator.";
+export const UNAUTHORISED_ADMIN_MESSAGE = "Ask Admin to Provide Access";
+
+export const UNAUTHORISED_ADMIN_EXPLANATION =
+  "Your account is registered, but an administrator must grant access before you can open the Admin Panel.";
 
 export function AdminGate() {
   const router = useRouter();
@@ -110,11 +112,11 @@ function UnauthorisedAccount({
   onSignOut: () => Promise<void>;
 }) {
   return (
-    <AuthCard title="Account not authorised">
-      <p className="text-sm leading-6 text-slate-600">
-        {UNAUTHORISED_ADMIN_MESSAGE}
-      </p>
-      <Button type="button" className="mt-6 w-full" onClick={onSignOut}>
+    <AuthCard
+      title={UNAUTHORISED_ADMIN_MESSAGE}
+      intro={UNAUTHORISED_ADMIN_EXPLANATION}
+    >
+      <Button type="button" className="w-full" onClick={onSignOut}>
         Sign out
       </Button>
     </AuthCard>
@@ -128,7 +130,6 @@ function AdminHealth({ onSignOut }: { onSignOut: () => Promise<void> }) {
   >("loading");
 
   const load = useCallback(async () => {
-    setState("loading");
     const access = await currentAccessToken();
     if (access.status === "signed-out") {
       await logOut();
@@ -158,9 +159,11 @@ function AdminHealth({ onSignOut }: { onSignOut: () => Promise<void> }) {
 
   useEffect(() => {
     let cancelled = false;
-    load().catch(() => {
-      if (!cancelled) setState("unavailable");
-    });
+    Promise.resolve()
+      .then(() => load())
+      .catch(() => {
+        if (!cancelled) setState("unavailable");
+      });
     return () => {
       cancelled = true;
     };

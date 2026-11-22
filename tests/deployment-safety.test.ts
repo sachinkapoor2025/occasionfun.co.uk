@@ -69,6 +69,7 @@ function baseInput(environment: "demo" | "prod") {
       Environment: target.environment,
       SmtpSecretArn: SMTP_SECRET_ARN,
       AllowedOrigins: originsValue(target.origins),
+      ...(environment === "demo" ? { AdminDeploymentPhase: "api" } : {}),
     } as {
       Environment: string;
       SmtpSecretArn: string;
@@ -113,19 +114,29 @@ describe("deployment configuration", () => {
     expect(errors.join(" ")).toMatch(/Amplify/);
   });
 
-  it("accepts demo admin phases and rejects them for production", () => {
+  it("requires AdminDeploymentPhase api for demo and rejects every phase for production", () => {
+    expect(assertDeployConfig(baseInput("demo"))).toEqual([]);
+    const omitted = baseInput("demo");
+    delete omitted.parameters.AdminDeploymentPhase;
+    const none = baseInput("demo");
+    none.parameters.AdminDeploymentPhase = "none";
     const identity = baseInput("demo");
     identity.parameters.AdminDeploymentPhase = "identity";
-    expect(assertDeployConfig(identity)).toEqual([]);
-    const api = baseInput("demo");
-    api.parameters.AdminDeploymentPhase = "api";
-    expect(assertDeployConfig(api)).toEqual([]);
     const invalid = baseInput("demo");
     invalid.parameters.AdminDeploymentPhase = "both";
-    expect(assertDeployConfig(invalid).join(" ")).toMatch(/AdminDeploymentPhase/);
-    const production = baseInput("prod");
-    production.parameters.AdminDeploymentPhase = "none";
-    expect(assertDeployConfig(production).join(" ")).toMatch(/must not select an admin deployment phase/);
+    for (const input of [omitted, none, identity, invalid]) {
+      expect(assertDeployConfig(input).join(" ")).toMatch(
+        /Demo deployments must set AdminDeploymentPhase to api/,
+      );
+    }
+    expect(assertDeployConfig(baseInput("prod"))).toEqual([]);
+    for (const phase of ["none", "identity", "api", "both"]) {
+      const production = baseInput("prod");
+      production.parameters.AdminDeploymentPhase = phase;
+      expect(assertDeployConfig(production).join(" ")).toMatch(
+        /must not select an admin deployment phase/,
+      );
+    }
   });
 
   it("rejects a second SMTP secret and wildcard origins", () => {
@@ -1059,6 +1070,7 @@ describe("deployment script configuration check", () => {
         "Environment: demo",
         `SmtpSecretArn: ${SMTP_SECRET_ARN}`,
         `AllowedOrigins: "${originsValue(DEMO.origins)}"`,
+        "AdminDeploymentPhase: api",
         "",
       ].join("\n"),
     );
@@ -1126,6 +1138,7 @@ function runConfigCheck(
       `Environment: ${target.environment}`,
       `SmtpSecretArn: ${SMTP_SECRET_ARN}`,
       `AllowedOrigins: "${originsValue(target.origins)}"`,
+      ...(environment === "demo" ? ["AdminDeploymentPhase: api"] : []),
       "",
     ].join("\n"),
   );

@@ -75,8 +75,8 @@ export function assertDeployConfig(input) {
     errors.push("Wildcard origins are not allowed.");
   }
   const adminPhase = input.parameters.AdminDeploymentPhase;
-  if (adminPhase && !["none", "identity", "api"].includes(adminPhase)) {
-    errors.push("AdminDeploymentPhase must be none, identity, or api.");
+  if (input.environment === "demo" && adminPhase !== "api") {
+    errors.push("Demo deployments must set AdminDeploymentPhase to api.");
   }
   if (input.environment === "prod" && adminPhase) {
     errors.push("Production parameters must not select an admin deployment phase.");

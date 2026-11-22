@@ -4,7 +4,11 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AdminGate, UNAUTHORISED_ADMIN_MESSAGE } from "../src/components/admin/AdminGate";
+import {
+  AdminGate,
+  UNAUTHORISED_ADMIN_EXPLANATION,
+  UNAUTHORISED_ADMIN_MESSAGE,
+} from "../src/components/admin/AdminGate";
 
 const replace = vi.hoisted(() => vi.fn());
 const logOut = vi.hoisted(() => vi.fn(async () => {}));
@@ -72,8 +76,9 @@ describe("admin health gate", () => {
     fetchAdminHealth.mockResolvedValue({ status: "forbidden" });
     render(<AdminGate />);
 
-    expect(await screen.findByText(UNAUTHORISED_ADMIN_MESSAGE)).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Account not authorised" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: UNAUTHORISED_ADMIN_MESSAGE })).toBeVisible();
+    expect(screen.getByText(UNAUTHORISED_ADMIN_EXPLANATION)).toBeVisible();
+    expect(screen.queryByText(/403|forbidden/i)).toBeNull();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeVisible();
     expect(screen.queryByText("The administration service is available.")).toBeNull();
     expect(screen.queryByText("Status: ok")).toBeNull();
@@ -93,7 +98,8 @@ describe("admin health gate", () => {
     fetchAdminHealth.mockResolvedValue({ status: "forbidden" });
     render(<AdminGate />);
 
-    expect(await screen.findByText(UNAUTHORISED_ADMIN_MESSAGE)).toBeVisible();
+    expect(await screen.findByRole("heading", { name: UNAUTHORISED_ADMIN_MESSAGE })).toBeVisible();
+    expect(screen.getByText(UNAUTHORISED_ADMIN_EXPLANATION)).toBeVisible();
     expect(fetchAdminHealth).toHaveBeenCalledWith("access-token");
     expect(screen.queryByText("The administration service is available.")).toBeNull();
     expect(logOut).not.toHaveBeenCalled();
@@ -106,7 +112,8 @@ describe("admin health gate", () => {
     expect(
       await screen.findByText("The administration service could not be reached."),
     ).toBeVisible();
-    expect(screen.queryByText(UNAUTHORISED_ADMIN_MESSAGE)).toBeNull();
+    expect(screen.queryByRole("heading", { name: UNAUTHORISED_ADMIN_MESSAGE })).toBeNull();
+    expect(screen.queryByText(UNAUTHORISED_ADMIN_EXPLANATION)).toBeNull();
     expect(logOut).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
   });
