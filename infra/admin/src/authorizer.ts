@@ -64,6 +64,10 @@ export async function authorizer(
     route: "authorizer",
     status: statusFor(decision),
     error: decision.outcome === "allow" ? undefined : decision.reason,
+    errorName:
+      decision.outcome === "unauthorized" && decision.reason === "invalid_token"
+        ? decision.errorName
+        : undefined,
   });
   return authorizerResponse(decision);
 }

@@ -23,6 +23,7 @@ export function logEvent(entry: {
   route: string;
   status: number;
   error?: string;
+  errorName?: string;
 }): void {
   const payload: Record<string, string | number> = {
     requestId: entry.requestId,
@@ -30,5 +31,6 @@ export function logEvent(entry: {
     status: entry.status,
   };
   if (entry.error) payload.error = entry.error;
+  if (entry.errorName) payload.errorName = entry.errorName;
   console.info(JSON.stringify(payload));
 }

@@ -1,3 +1,4 @@
+import { FetchError, NonRetryableFetchError } from "aws-jwt-verify/error";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authorizer, authorizerResponse } from "../src/authorizer";
 import { decide, resetVerifierCache } from "../src/authorize";
@@ -50,6 +51,7 @@ describe("access-token authorisation", () => {
     await expect(decide(`Bearer ${token}`, demo, keys.fetcher)).resolves.toEqual({
       outcome: "unauthorized",
       reason: "invalid_token",
+      errorName: "JwtInvalidSignatureError",
     });
   });
 
@@ -63,6 +65,7 @@ describe("access-token authorisation", () => {
     await expect(decide(`Bearer ${token}`, demo, keys.fetcher)).resolves.toEqual({
       outcome: "unauthorized",
       reason: "invalid_token",
+      errorName: "ParameterValidationError",
     });
   });
 
@@ -76,6 +79,7 @@ describe("access-token authorisation", () => {
     await expect(decide(`Bearer ${token}`, demo, keys.fetcher)).resolves.toEqual({
       outcome: "unauthorized",
       reason: "invalid_token",
+      errorName: "CognitoJwtInvalidClientIdError",
     });
   });
 
@@ -89,6 +93,7 @@ describe("access-token authorisation", () => {
     await expect(decide(`Bearer ${token}`, demo, keys.fetcher)).resolves.toEqual({
       outcome: "unauthorized",
       reason: "invalid_token",
+      errorName: "CognitoJwtInvalidTokenUseError",
     });
   });
 
@@ -102,6 +107,7 @@ describe("access-token authorisation", () => {
     await expect(decide(`Bearer ${token}`, demo, keys.fetcher)).resolves.toEqual({
       outcome: "unauthorized",
       reason: "invalid_token",
+      errorName: "JwtExpiredError",
     });
   });
 
@@ -128,6 +134,7 @@ describe("access-token authorisation", () => {
     await expect(decide(`Bearer ${token}`, demo, keys.fetcher)).resolves.toEqual({
       outcome: "unauthorized",
       reason: "invalid_token",
+      errorName: "ParameterValidationError",
     });
     await expect(decide(`Bearer ${token}`, production, keys.fetcher)).resolves.toEqual({
       outcome: "allow",
@@ -167,6 +174,175 @@ describe("access-token authorisation", () => {
     expect(logged).not.toContain(token);
     expect(logged).toContain("malformed_token");
     expect(logged).toContain("req-1");
+  });
+
+  it("logs the verifier error name without the token or error message", async () => {
+    const keys = await tokenFixture();
+    vi.stubEnv("ENVIRONMENT", "demo");
+    vi.stubEnv("COGNITO_REGION", "eu-west-2");
+    vi.stubEnv("COGNITO_USER_POOL_ID", DEMO_POOL);
+    vi.stubEnv("COGNITO_CLIENT_ID", DEMO_CLIENT);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const cases = [
+      {
+        claims: { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+        options: { issuer },
+        key: keys.otherPrivateKey,
+        errorName: "JwtInvalidSignatureError",
+        hidden: "Invalid signature",
+      },
+      {
+        claims: { token_use: "access", client_id: "anotherclient", "cognito:groups": ["admin"] },
+        options: { issuer },
+        key: keys.privateKey,
+        errorName: "CognitoJwtInvalidClientIdError",
+        hidden: "anotherclient",
+      },
+      {
+        claims: { token_use: "id", aud: DEMO_CLIENT, "cognito:groups": ["admin"] },
+        options: { issuer },
+        key: keys.privateKey,
+        errorName: "CognitoJwtInvalidTokenUseError",
+        hidden: "Token use",
+      },
+      {
+        claims: { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+        options: { issuer, expiresIn: "-2m" },
+        key: keys.privateKey,
+        errorName: "JwtExpiredError",
+        hidden: "Token expired",
+      },
+    ] as const;
+
+    for (const [index, item] of cases.entries()) {
+      const token = await signToken(item.key, item.claims, item.options);
+      const result = await authorizer(
+        {
+          headers: { authorization: `Bearer ${token}` },
+          requestContext: { requestId: `req-name-${index}` },
+        },
+        keys.fetcher,
+      );
+      expect(result).toEqual({ errorMessage: "Unauthorized" });
+      const logged = String(info.mock.calls.at(-1)?.[0]);
+      expect(JSON.parse(logged)).toEqual({
+        requestId: `req-name-${index}`,
+        route: "authorizer",
+        status: 401,
+        error: "invalid_token",
+        errorName: item.errorName,
+      });
+      expect(logged).not.toContain(token);
+      expect(logged).not.toContain(item.hidden);
+    }
+  });
+
+  it("keeps a missing admin group at 403 without a verifier error name", async () => {
+    const keys = await tokenFixture();
+    vi.stubEnv("ENVIRONMENT", "demo");
+    vi.stubEnv("COGNITO_REGION", "eu-west-2");
+    vi.stubEnv("COGNITO_USER_POOL_ID", DEMO_POOL);
+    vi.stubEnv("COGNITO_CLIENT_ID", DEMO_CLIENT);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["readers"] },
+      { issuer },
+    );
+    await expect(
+      authorizer(
+        {
+          headers: { authorization: `Bearer ${token}` },
+          requestContext: { requestId: "req-group" },
+        },
+        keys.fetcher,
+      ),
+    ).resolves.toEqual({ isAuthorized: false });
+    const logged = String(info.mock.calls[0]?.[0]);
+    expect(JSON.parse(logged)).toEqual({
+      requestId: "req-group",
+      route: "authorizer",
+      status: 403,
+      error: "missing_admin_group",
+    });
+    expect(logged).not.toContain(token);
+    expect(logged).not.toContain("errorName");
+  });
+
+  it("logs a successful admin decision without an error name", async () => {
+    const keys = await tokenFixture();
+    vi.stubEnv("ENVIRONMENT", "demo");
+    vi.stubEnv("COGNITO_REGION", "eu-west-2");
+    vi.stubEnv("COGNITO_USER_POOL_ID", DEMO_POOL);
+    vi.stubEnv("COGNITO_CLIENT_ID", DEMO_CLIENT);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+      { issuer },
+    );
+    await expect(
+      authorizer(
+        {
+          headers: { authorization: `Bearer ${token}` },
+          requestContext: { requestId: "req-allow" },
+        },
+        keys.fetcher,
+      ),
+    ).resolves.toEqual({
+      isAuthorized: true,
+      context: { sub: "11111111-2222-4333-8444-555555555555", hasAdmin: "true" },
+    });
+    expect(JSON.parse(String(info.mock.calls[0]?.[0]))).toEqual({
+      requestId: "req-allow",
+      route: "authorizer",
+      status: 200,
+    });
+  });
+
+  it("classifies JWKS fetch failures as unavailable and omits the fetch error text", async () => {
+    const keys = await tokenFixture();
+    vi.stubEnv("ENVIRONMENT", "demo");
+    vi.stubEnv("COGNITO_REGION", "eu-west-2");
+    vi.stubEnv("COGNITO_USER_POOL_ID", DEMO_POOL);
+    vi.stubEnv("COGNITO_CLIENT_ID", DEMO_CLIENT);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+      { issuer },
+    );
+    const secret = "jwks-fetch-secret-value";
+    const failures = [
+      new FetchError("https://cognito.example/secret-jwks.json", secret),
+      new NonRetryableFetchError("https://cognito.example/secret-jwks.json", "status 500"),
+    ];
+    for (const [index, failure] of failures.entries()) {
+      const result = await authorizer(
+        {
+          headers: { authorization: `Bearer ${token}` },
+          requestContext: { requestId: `req-jwks-${index}` },
+        },
+        {
+          async fetch() {
+            throw failure;
+          },
+        },
+      );
+      expect(result).toEqual({ errorMessage: "Unauthorized" });
+      const logged = String(info.mock.calls.at(-1)?.[0]);
+      expect(JSON.parse(logged)).toEqual({
+        requestId: `req-jwks-${index}`,
+        route: "authorizer",
+        status: 401,
+        error: "jwks_unavailable",
+      });
+      expect(logged).not.toContain(token);
+      expect(logged).not.toContain(secret);
+      expect(logged).not.toContain("Failed to fetch");
+      expect(logged).not.toContain("secret-jwks");
+      expect(logged).not.toContain("errorName");
+    }
   });
 });
 

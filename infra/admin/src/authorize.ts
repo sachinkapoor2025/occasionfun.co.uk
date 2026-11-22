@@ -7,18 +7,19 @@ import { ADMIN_GROUP, type AuthConfig } from "./config";
 const BEARER =
   /^Bearer ([A-Za-z0-9_-]+=*\.[A-Za-z0-9_-]+=*\.[A-Za-z0-9_-]+=*)$/i;
 const SUBJECT = /^[A-Za-z0-9_-]{1,128}$/;
+const SAFE_ERROR_NAME = /^[A-Za-z][A-Za-z0-9]{0,80}$/;
 const MAX_HEADER_LENGTH = 12_000;
 
 export type Decision =
   | { outcome: "allow"; sub: string }
   | {
       outcome: "unauthorized";
-      reason:
-        | "missing_token"
-        | "malformed_token"
-        | "invalid_token"
-        | "jwks_unavailable"
-        | "misconfigured";
+      reason: "missing_token" | "malformed_token" | "jwks_unavailable" | "misconfigured";
+    }
+  | {
+      outcome: "unauthorized";
+      reason: "invalid_token";
+      errorName?: string;
     }
   | { outcome: "forbidden"; reason: "missing_admin_group" };
 
@@ -66,8 +67,20 @@ function isGroupError(error: unknown): boolean {
   );
 }
 
+function errorClassName(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  // Node 24 leaves Error.name as "Error" on these subclasses.
+  const className = error.constructor?.name;
+  if (typeof className === "string" && className !== "Error" && SAFE_ERROR_NAME.test(className)) {
+    return className;
+  }
+  if (error.name !== "Error" && SAFE_ERROR_NAME.test(error.name)) return error.name;
+  return undefined;
+}
+
 function isJwksError(error: unknown): boolean {
-  return error instanceof Error && /Fetch|Jwks|Network/i.test(error.name);
+  const name = errorClassName(error);
+  return name !== undefined && /Fetch|Jwks|Network/i.test(name);
 }
 
 function subject(value: unknown): string | null {
@@ -95,6 +108,9 @@ export async function decide(
     if (isJwksError(error)) {
       return { outcome: "unauthorized", reason: "jwks_unavailable" };
     }
-    return { outcome: "unauthorized", reason: "invalid_token" };
+    const errorName = errorClassName(error);
+    return errorName
+      ? { outcome: "unauthorized", reason: "invalid_token", errorName }
+      : { outcome: "unauthorized", reason: "invalid_token" };
   }
 }
