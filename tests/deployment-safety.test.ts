@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  ADMIN_UPDATE_ADDITIONS,
   findUnsafeChanges,
   inspectChangeSet,
   inspectChangeSetFile,
@@ -31,6 +32,7 @@ import {
   AWS_REGION,
   DEMO,
   PRODUCTION,
+  PROTECTED_LOGICAL_IDS,
   SMTP_SECRET_ARN,
   originsValue,
 } from "../scripts/deployment-targets.mjs";
@@ -67,6 +69,11 @@ function baseInput(environment: "demo" | "prod") {
       Environment: target.environment,
       SmtpSecretArn: SMTP_SECRET_ARN,
       AllowedOrigins: originsValue(target.origins),
+    } as {
+      Environment: string;
+      SmtpSecretArn: string;
+      AllowedOrigins: string;
+      AdminDeploymentPhase?: string;
     },
   };
 }
@@ -104,6 +111,21 @@ describe("deployment configuration", () => {
     expect(errors.join(" ")).toMatch(/demo DynamoDB/);
     expect(errors.join(" ")).toMatch(/demo API/);
     expect(errors.join(" ")).toMatch(/Amplify/);
+  });
+
+  it("accepts demo admin phases and rejects them for production", () => {
+    const identity = baseInput("demo");
+    identity.parameters.AdminDeploymentPhase = "identity";
+    expect(assertDeployConfig(identity)).toEqual([]);
+    const api = baseInput("demo");
+    api.parameters.AdminDeploymentPhase = "api";
+    expect(assertDeployConfig(api)).toEqual([]);
+    const invalid = baseInput("demo");
+    invalid.parameters.AdminDeploymentPhase = "both";
+    expect(assertDeployConfig(invalid).join(" ")).toMatch(/AdminDeploymentPhase/);
+    const production = baseInput("prod");
+    production.parameters.AdminDeploymentPhase = "none";
+    expect(assertDeployConfig(production).join(" ")).toMatch(/must not select an admin deployment phase/);
   });
 
   it("rejects a second SMTP secret and wildcard origins", () => {
@@ -295,6 +317,79 @@ describe("change set safety", () => {
     expect(findings[0]?.reasons).toContain("unexpected resource addition");
   });
 
+  it("allows only the explicit demo admin additions, including the SAM stage", () => {
+    expect(ADMIN_UPDATE_ADDITIONS).toContain("AdminHttpApiApiGatewayDefaultStage");
+    expect(ADMIN_UPDATE_ADDITIONS).not.toContain("ContactHttpApiApiGatewayDefaultStage");
+    expect(new Set(ADMIN_UPDATE_ADDITIONS).size).toBe(ADMIN_UPDATE_ADDITIONS.length);
+    for (const id of ADMIN_UPDATE_ADDITIONS) {
+      expect(id).not.toMatch(/[*?]/);
+      expect(PROTECTED_LOGICAL_IDS).not.toContain(id);
+    }
+    const additions = ADMIN_UPDATE_ADDITIONS.map((logicalId) => ({
+      ResourceChange: {
+        Action: "Add",
+        LogicalResourceId: logicalId,
+        Replacement: "False",
+      },
+    }));
+    expect(findUnsafeChanges(additions, { mode: "update" })).toEqual([]);
+    expect(
+      findUnsafeChanges(
+        [
+          {
+            ResourceChange: {
+              Action: "Add",
+              LogicalResourceId: "AdminHttpApiApiGatewayDefaultStage",
+              Replacement: "True",
+            },
+          },
+        ],
+        { mode: "update" },
+      )[0]?.reasons,
+    ).toContain("replacement");
+    for (const logicalId of PROTECTED_LOGICAL_IDS) {
+      const added = findUnsafeChanges(
+        [
+          {
+            ResourceChange: {
+              Action: "Add",
+              LogicalResourceId: logicalId,
+              Replacement: "False",
+            },
+          },
+        ],
+        { mode: "update" },
+      );
+      const removed = findUnsafeChanges(
+        [
+          {
+            ResourceChange: {
+              Action: "Remove",
+              LogicalResourceId: logicalId,
+              Replacement: "False",
+            },
+          },
+        ],
+        { mode: "update" },
+      );
+      const replaced = findUnsafeChanges(
+        [
+          {
+            ResourceChange: {
+              Action: "Modify",
+              LogicalResourceId: logicalId,
+              Replacement: "True",
+            },
+          },
+        ],
+        { mode: "update" },
+      );
+      expect(added[0]?.reasons).toContain("protected resource would be created again");
+      expect(removed[0]?.reasons).toContain("deletion");
+      expect(replaced[0]?.reasons).toContain("replacement");
+    }
+  });
+
   it("fails closed for a missing file, invalid JSON, a missing Changes array, and an empty array", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "occasionfun-changeset-"));
     const missing = path.join(directory, "missing.json");
@@ -432,6 +527,9 @@ describe("GitHub Actions workflows", () => {
     expect(demo).toContain(DEMO.apiId);
     expect(demo).toContain(DEMO.endpoint);
     expect(demo).toContain(originsValue(DEMO.origins));
+    expect(demo).toContain("AdminDeploymentPhase: api");
+    expect(demo).not.toContain("AdminDeploymentPhase: none");
+    expect(demo).not.toContain("--no-execute");
     expect(demo).toContain(SMTP_SECRET_ARN);
     expect(demo).toContain("aws-region: eu-west-2");
     expect(demo).toContain("secrets.AWS_ACCESS_KEY_ID");
@@ -587,15 +685,23 @@ describe("GitHub Actions workflows", () => {
     expect(amplify).toContain("nvm install 24");
     expect(amplify).toContain("nvm alias default 24");
     expect(amplify).toContain("node scripts/amplify-public-env.mjs");
+    const demoAdmin = {
+      NEXT_PUBLIC_COGNITO_REGION: DEMO.cognitoRegion,
+      NEXT_PUBLIC_COGNITO_POOL_ID: DEMO.cognitoPoolId,
+      NEXT_PUBLIC_COGNITO_CLIENT_ID: DEMO.cognitoClientId,
+      NEXT_PUBLIC_ADMIN_API_BASE: DEMO.adminApiBase,
+    };
     expect(resolvePublicEnv("demo", {})).toEqual({
       NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint,
       NEXT_PUBLIC_SITE_URL: DEMO.siteUrl,
+      ...demoAdmin,
     });
     expect(
       resolvePublicEnv("demo", { NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint }),
     ).toEqual({
       NEXT_PUBLIC_CONTACT_ENDPOINT: DEMO.endpoint,
       NEXT_PUBLIC_SITE_URL: DEMO.siteUrl,
+      ...demoAdmin,
     });
     expect(resolvePublicEnv("main", {})).toEqual({
       NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint,
@@ -627,6 +733,13 @@ describe("GitHub Actions workflows", () => {
     expect(() =>
       resolvePublicEnv("demo", { NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint }),
     ).toThrow(/refused the production contact API/);
+    expect(() =>
+      resolvePublicEnv("main", { NEXT_PUBLIC_ADMIN_API_BASE: DEMO.adminApiBase }),
+    ).toThrow(/refused the demo administration API/);
+    const demoRendered = renderPublicEnv("demo", {});
+    expect(demoRendered).toContain(`NEXT_PUBLIC_ADMIN_API_BASE=${DEMO.adminApiBase}`);
+    expect(demoRendered).toContain(`NEXT_PUBLIC_COGNITO_POOL_ID=${DEMO.cognitoPoolId}`);
+    expect(demoRendered).not.toContain(PRODUCTION.apiId);
     const rendered = renderPublicEnv("main", {
       AWS_SECRET_ACCESS_KEY: "secret-value",
       SMTP_SECRET_ARN: "arn:aws:secretsmanager:eu-west-2:796174527529:secret:smtp",
@@ -1123,6 +1236,9 @@ describe("CloudFormation execution role", () => {
     expect(deployScript.indexOf("assert-safe-change-set.mjs")).toBeLessThan(
       deployScript.indexOf("execute-change-set"),
     );
+    expect(deployScript.indexOf("Change set passed the safety check and was not executed.")).toBeLessThan(
+      deployScript.indexOf("aws cloudformation execute-change-set"),
+    );
     const unsafe = findUnsafeChanges(
       [
         {
@@ -1177,6 +1293,7 @@ describe("CloudFormation execution role", () => {
       productionJob.indexOf("  smoke-test:"),
     );
     expect(productionSlice).not.toContain("occasionfun-cloudformation-demo");
+    expect(productionSlice).not.toContain("AdminDeploymentPhase");
     expect(productionSlice).toContain(
       `--role-arn ${PRODUCTION_CLOUDFORMATION_ROLE_ARN}`,
     );

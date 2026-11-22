@@ -44,6 +44,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             infra/contact-api/package-lock.json
+            infra/admin/package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci
@@ -76,6 +77,15 @@ jobs:
 
       - name: Build contact API bundle
         run: npm run build --prefix infra/contact-api
+
+      - name: Install admin API dependencies
+        run: npm ci --prefix infra/admin
+
+      - name: Build admin API bundle
+        run: npm run build --prefix infra/admin
+
+      - name: Stage the admin bundle beside the contact bundle
+        run: node scripts/stage-admin-bundle.mjs
 
       - name: SAM validate
         working-directory: infra/contact-api
@@ -184,6 +194,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             infra/contact-api/package-lock.json
+            infra/admin/package-lock.json
 
       - name: Disable Amplify auto-build on the demo branch
         env:
@@ -201,6 +212,12 @@ jobs:
       - name: Build contact API bundle
         run: npm run build --prefix infra/contact-api
 
+      - name: Install admin API dependencies
+        run: npm ci --prefix infra/admin
+
+      - name: Build admin API bundle
+        run: npm run build --prefix infra/admin
+
       - name: Install SAM CLI
         uses: aws-actions/setup-sam@f84ec7d548307efafe33230528756de3c5841a17 # v2
         with:
@@ -212,6 +229,9 @@ jobs:
           name: contact-demo-template
           path: infra/contact-api
 
+      - name: Stage the admin bundle beside the contact bundle
+        run: node scripts/stage-admin-bundle.mjs
+
       - name: SAM build
         working-directory: infra/contact-api
         run: sam build --template template.demo.yaml
@@ -221,6 +241,12 @@ jobs:
         run: |
           test -f template.demo.yaml
           test -f .aws-sam/build/template.yaml
+          test -f dist/handler.js
+          test -f admin-dist/handler.js
+          if cmp -s dist/handler.js admin-dist/handler.js; then
+            echo "Contact and admin Lambda bundles are the same file."
+            exit 1
+          fi
           if grep -q "ContactRetryFunctionRetrySchedulePermission:" .aws-sam/build/template.yaml; then
             echo "Demo deployment package declares the retained retry permission."
             exit 1
@@ -232,6 +258,7 @@ jobs:
           Environment: demo
           SmtpSecretArn: arn:aws:secretsmanager:eu-west-2:796174527529:secret:occasionfun-co-uk/contact/smtp-32Px2G
           AllowedOrigins: "https://occasionfun.co.uk,https://www.occasionfun.co.uk,https://d2oib89bmco9su.amplifyapp.com,https://demo.d2oib89bmco9su.amplifyapp.com"
+          AdminDeploymentPhase: api
           EOF
 
       - name: Update the existing demo stack
@@ -375,6 +402,10 @@ jobs:
           test -f .aws-sam/build/template.yaml
           if grep -q "ContactRetryFunctionRetrySchedulePermission:" .aws-sam/build/template.yaml; then
             echo "Production deployment package declares the retained retry permission."
+            exit 1
+          fi
+          if grep -q "AdminUserPool:" .aws-sam/build/template.yaml; then
+            echo "Production deployment package contains demo admin resources."
             exit 1
           fi
 

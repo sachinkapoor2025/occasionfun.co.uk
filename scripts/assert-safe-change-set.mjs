@@ -4,11 +4,36 @@ import { PROTECTED_LOGICAL_IDS } from "./deployment-targets.mjs";
 const protectedIds = new Set(PROTECTED_LOGICAL_IDS);
 
 /**
+ * Logical IDs an update of the existing demo stack may add.
+ * Every other addition is rejected. Contact resources are not in this list.
+ * AdminHttpApiApiGatewayDefaultStage is absent from the source template.
+ * The SAM translator emits that stage for AdminHttpApi when StageName is
+ * $default. ContactHttpApiApiGatewayDefaultStage already exists and is not listed.
+ */
+export const ADMIN_UPDATE_ADDITIONS = [
+  "AdminUserPool",
+  "AdminUserPoolClient",
+  "AdminGroup",
+  "AdminAuthorizerLogGroup",
+  "AdminApiLogGroup",
+  "AdminAuthorizerRole",
+  "AdminApiRole",
+  "AdminAuthorizerFunction",
+  "AdminAuthorizerInvokePermission",
+  "AdminApiInvokePermission",
+  "AdminApiFunction",
+  "AdminHttpApi",
+  "AdminHttpApiApiGatewayDefaultStage",
+];
+
+const adminAdditions = new Set(ADMIN_UPDATE_ADDITIONS);
+
+/**
  * An update of an existing stack may modify resources in place.
- * It may not add, remove, or replace anything. There is no Add allowlist.
- * A create change set may add resources and still may not remove or replace them.
+ * It may add only ADMIN_UPDATE_ADDITIONS. It may not remove or replace anything.
  * Protected logical ids: LeadsTable, ContactFunction, ContactRetryFunction,
  * ContactHttpApi, ContactLogGroup, ContactRetryLogGroup.
+ * A create change set may add resources and still may not remove or replace them.
  * SAM's "No changes to deploy" message never reaches this checker.
  */
 export function findUnsafeChanges(changes, { mode }) {
@@ -24,11 +49,11 @@ export function findUnsafeChanges(changes, { mode }) {
       reasons.push("replacement");
     }
     if (mode === "update" && action === "Add") {
-      reasons.push(
-        protectedIds.has(logicalId)
-          ? "protected resource would be created again"
-          : "unexpected resource addition",
-      );
+      if (protectedIds.has(logicalId)) {
+        reasons.push("protected resource would be created again");
+      } else if (!adminAdditions.has(logicalId)) {
+        reasons.push("unexpected resource addition");
+      }
     }
     if (reasons.length > 0) {
       findings.push({

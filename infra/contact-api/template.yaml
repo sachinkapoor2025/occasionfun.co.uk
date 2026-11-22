@@ -43,9 +43,36 @@ Parameters:
       stack. Do not combine those lists and do not use a wildcard. When
       updating the existing demo stack, pass the origins already configured
       on that API so its CORS configuration is preserved.
+  # BEGIN DEMO ADMIN PARAMETERS
+  AdminDeploymentPhase:
+    Type: String
+    Default: none
+    AllowedValues:
+      - none
+      - identity
+      - api
+    Description: >
+      Demo contact stack only. none adds no admin resources. identity
+      creates the pool, client, and group with deletion protection
+      inactive. api sets deletion protection active and creates the
+      protected admin API. Do not pass this parameter to production.
+  # END DEMO ADMIN PARAMETERS
 
 Conditions:
   IsProduction: !Equals [!Ref Environment, "prod"]
+  # BEGIN DEMO ADMIN CONDITIONS
+  IsDemo: !Equals [!Ref Environment, "demo"]
+  IsAdminIdentityPhase: !Equals [!Ref AdminDeploymentPhase, "identity"]
+  IsAdminApiPhase: !Equals [!Ref AdminDeploymentPhase, "api"]
+  DeployAdminIdentity: !And
+    - !Condition IsDemo
+    - !Or
+      - !Condition IsAdminIdentityPhase
+      - !Condition IsAdminApiPhase
+  DeployAdminApi: !And
+    - !Condition IsDemo
+    - !Condition IsAdminApiPhase
+  # END DEMO ADMIN CONDITIONS
 
 Globals:
   Function:
@@ -198,6 +225,265 @@ Resources:
         ThrottlingRateLimit: 5
         DetailedMetricsEnabled: true
 
+  # BEGIN DEMO ADMIN RESOURCES
+  # Created only when Environment is demo. Production rendering removes this region.
+  AdminUserPool:
+    Type: AWS::Cognito::UserPool
+    Condition: DeployAdminIdentity
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: occasionfun-co-uk-demo-users
+      # Inactive while the pool is first created, so a failed phase-1
+      # rollback can delete it. Phase api sets this to ACTIVE in place.
+      DeletionProtection: !If [IsAdminApiPhase, ACTIVE, INACTIVE]
+      # Refresh-token rotation requires Essentials or Plus.
+      # New pools default to Essentials; this pins that requirement.
+      UserPoolTier: ESSENTIALS
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      # MFA is off. Sign-in is email and password. SMS MFA and email
+      # MFA are not enabled. Dashboard access stays the admin group.
+      MfaConfiguration: "OFF"
+
+  AdminUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: DeployAdminIdentity
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Properties:
+      ClientName: occasionfun-co-uk-demo-admin-web
+      UserPoolId: !Ref AdminUserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      # False is the documented SDK-only setting. Callback URLs, logout
+      # URLs, scopes, and OAuth grants are omitted because they require
+      # this flag to be true.
+      AllowedOAuthFlowsUserPoolClient: false
+      # This list replaces the default that includes
+      # ALLOW_REFRESH_TOKEN_AUTH. Password, choice-based, and custom
+      # API flows are not enabled.
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+      AccessTokenValidity: 15
+      IdTokenValidity: 15
+      RefreshTokenValidity: 12
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: hours
+      RefreshTokenRotation:
+        Feature: ENABLED
+        RetryGracePeriodSeconds: 0
+
+  AdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: DeployAdminIdentity
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Properties:
+      GroupName: admin
+      UserPoolId: !Ref AdminUserPool
+      Description: Dashboard access. Change membership in the Cognito console.
+
+  AdminAuthorizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: DeployAdminApi
+    Properties:
+      LogGroupName: /aws/lambda/occasionfun-co-uk-demo-admin-authorizer
+      RetentionInDays: 30
+
+  AdminApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: DeployAdminApi
+    Properties:
+      LogGroupName: /aws/lambda/occasionfun-co-uk-demo-admin-api
+      RetentionInDays: 30
+
+  AdminAuthorizerRole:
+    Type: AWS::IAM::Role
+    Condition: DeployAdminApi
+    Properties:
+      RoleName: occasionfun-co-uk-demo-admin-authorizer
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: own-log-group
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${AdminAuthorizerLogGroup.Arn}:*"
+
+  AdminApiRole:
+    Type: AWS::IAM::Role
+    Condition: DeployAdminApi
+    Properties:
+      RoleName: occasionfun-co-uk-demo-admin-api
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: own-log-group
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${AdminApiLogGroup.Arn}:*"
+
+  AdminAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Condition: DeployAdminApi
+    DependsOn: AdminAuthorizerLogGroup
+    Properties:
+      FunctionName: occasionfun-co-uk-demo-admin-authorizer
+      Role: !GetAtt AdminAuthorizerRole.Arn
+      Handler: handler.authorizer
+      Runtime: nodejs24.x
+      Architectures:
+        - arm64
+      MemorySize: 256
+      CodeUri: admin-dist/
+      Timeout: 5
+      Description: Verifies Cognito access tokens for the demo admin API.
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          COGNITO_REGION: !Ref AWS::Region
+          COGNITO_USER_POOL_ID: !Ref AdminUserPool
+          COGNITO_CLIENT_ID: !Ref AdminUserPoolClient
+
+  # The authoriser id is assigned when API Gateway creates the authoriser,
+  # so this source is every authoriser on this API and no other API.
+  AdminAuthorizerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployAdminApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AdminAuthorizerFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminHttpApi}/authorizers/*
+
+  AdminApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployAdminApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AdminApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminHttpApi}/$default/GET/health
+
+  AdminApiFunction:
+    Type: AWS::Serverless::Function
+    Condition: DeployAdminApi
+    DependsOn: AdminApiLogGroup
+    Properties:
+      FunctionName: occasionfun-co-uk-demo-admin-api
+      Role: !GetAtt AdminApiRole.Arn
+      Handler: handler.api
+      Runtime: nodejs24.x
+      Architectures:
+        - arm64
+      MemorySize: 256
+      CodeUri: admin-dist/
+      Timeout: 15
+      Description: Protected demo admin routes. The first route is GET /health.
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          COGNITO_REGION: !Ref AWS::Region
+          COGNITO_USER_POOL_ID: !Ref AdminUserPool
+          COGNITO_CLIENT_ID: !Ref AdminUserPoolClient
+
+  AdminHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Condition: DeployAdminApi
+    Properties:
+      StageName: $default
+      FailOnWarnings: true
+      CorsConfiguration:
+        AllowOrigins:
+          - https://demo.d2oib89bmco9su.amplifyapp.com
+          - https://d2oib89bmco9su.amplifyapp.com
+        AllowHeaders:
+          - authorization
+          - content-type
+        AllowMethods:
+          - GET
+          - OPTIONS
+        MaxAge: 600
+      DefinitionBody:
+        openapi: "3.0.1"
+        info:
+          title: OccasionFun demo admin API
+          version: "1.0"
+        # Root security is the default. A new path inherits the authoriser.
+        # SAM's Auth.AuthorizerResultTtlInSeconds is not written into an HTTP
+        # API unless an identity source is set, and an identity source would
+        # reject a missing token before the authoriser runs.
+        security:
+          - AdminAccessTokenAuthorizer: []
+        paths:
+          /health:
+            get:
+              security:
+                - AdminAccessTokenAuthorizer: []
+              x-amazon-apigateway-integration:
+                payloadFormatVersion: "2.0"
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AdminApiFunction.Arn}/invocations
+                timeoutInMillis: 15000
+        components:
+          securitySchemes:
+            AdminAccessTokenAuthorizer:
+              type: apiKey
+              name: Authorization
+              in: header
+              x-amazon-apigateway-authorizer:
+                type: request
+                authorizerUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AdminAuthorizerFunction.Arn}/invocations
+                authorizerPayloadFormatVersion: "2.0"
+                enableSimpleResponses: true
+                authorizerResultTtlInSeconds: 0
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+        DetailedMetricsEnabled: true
+  # END DEMO ADMIN RESOURCES
+
 Outputs:
   ContactEndpoint:
     Description: Set as NEXT_PUBLIC_CONTACT_ENDPOINT, then rebuild the static site.
@@ -208,3 +494,18 @@ Outputs:
     Value: !Ref SmtpSecretArn
   DeploymentEnvironment:
     Value: !Ref Environment
+  # BEGIN DEMO ADMIN OUTPUTS
+  UserPoolId:
+    Condition: DeployAdminIdentity
+    Value: !Ref AdminUserPool
+  UserPoolClientId:
+    Condition: DeployAdminIdentity
+    Value: !Ref AdminUserPoolClient
+  AdminApiBaseUrl:
+    Condition: DeployAdminApi
+    Description: Later value for NEXT_PUBLIC_ADMIN_API_BASE. Not wired by this change.
+    Value: !Sub https://${AdminHttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  AdminHealthPath:
+    Condition: DeployAdminApi
+    Value: /health
+  # END DEMO ADMIN OUTPUTS

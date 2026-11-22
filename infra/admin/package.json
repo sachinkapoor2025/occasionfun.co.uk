@@ -1,0 +1,22 @@
+{
+  "name": "occasionfun-co-uk-admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OccasionFun admin API foundation. HTTP API, Lambda authoriser, and protected health route. Not deployed.",
+  "scripts": {
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/handler.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "aws-jwt-verify": "5.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "esbuild": "^0.28.0",
+    "jose": "^6.1.0",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.0"
+  }
+}

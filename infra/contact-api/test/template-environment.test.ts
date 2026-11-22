@@ -58,9 +58,14 @@ describe("contact API environments", () => {
     expect(hasLiteralLine(template, "LogGroupName", demoNames.retryLogGroup)).toBe(true);
     expect(hasLiteralLine(template, "FunctionName", demoNames.contactFunction)).toBe(true);
     expect(hasLiteralLine(template, "FunctionName", demoNames.retryFunction)).toBe(true);
-    expect(template).not.toMatch(/^ +(TableName|LogGroupName|FunctionName):\s*[!{]/m);
-    expect(template).not.toContain("SourceAccount");
+    const contactResources = template.slice(0, template.indexOf("  # BEGIN DEMO ADMIN RESOURCES"));
+    expect(contactResources).not.toMatch(/^ +(TableName|LogGroupName|FunctionName):\s*[!{]/m);
     expect(template).not.toContain("ContactRetryFunctionRetrySchedulePermission:");
+    const schedule = template.slice(
+      template.indexOf("ContactRetryFunctionRetrySchedule:"),
+      template.indexOf("ContactHttpApi:"),
+    );
+    expect(schedule).not.toContain("SourceAccount");
   });
 
   it("leaves the retained demo retry permission out of the application stack", () => {
@@ -69,7 +74,12 @@ describe("contact API environments", () => {
     expect(permission.declaresPermission).toBe(false);
     expect(permission.requiresReplacement).toBe(false);
     expect(permission.risks).toEqual([]);
-    expect(template).not.toMatch(/Type:\s*AWS::Lambda::Permission/);
+    const retryRule = template.slice(
+      template.indexOf("  ContactRetryFunctionRetrySchedule:"),
+      template.indexOf("  ContactHttpApi:"),
+    );
+    expect(retryRule).not.toMatch(/Type:\s*AWS::Lambda::Permission/);
+    expect(template.match(/Type:\s*AWS::Lambda::Permission/g)).toHaveLength(2);
     expect(template).not.toMatch(/Type:\s*Schedule\b/);
     expect(template).not.toContain("GHXjmJNlS8ce");
     expect(template).toContain("ScheduleExpression: rate(5 minutes)");
@@ -159,13 +169,13 @@ describe("contact API environments", () => {
     expect(origins).toContain('AllowedPattern: "^https://[A-Za-z0-9.-]+$"');
     expect(origins).not.toContain("https://occasionfun.co.uk");
     expect(origins).not.toContain("amplifyapp.com");
-    expect(template).not.toContain("*");
+    expect(origins).not.toContain("*");
     expect(template).toContain("AllowOrigins: !Ref AllowedOrigins");
   });
 
   it("creates the API Gateway and retry schedule inside the stack", () => {
     expect(template).not.toContain("0e6zpkvbkj");
-    expect(template.match(/Type: AWS::Serverless::HttpApi/g)).toHaveLength(1);
+    expect(template.match(/Type: AWS::Serverless::HttpApi/g)).toHaveLength(2);
     expect(template).toContain("ApiId: !Ref ContactHttpApi");
     expect(template).not.toMatch(/Type:\s*Schedule\b/);
     expect(template).toContain("ScheduleExpression: rate(5 minutes)");
@@ -224,5 +234,130 @@ describe("contact API environments", () => {
     expect(permissionStack).not.toContain("occasionfun-co-uk-contact-retry");
     expect(permissionStack).not.toContain("SourceAccount");
     expect(permissionStack).not.toContain("*");
+  });
+
+  it("keeps SourceAccount off the contact retry rule and permission", () => {
+    const newline = template.includes("\r\n") ? "\r\n" : "\n";
+    const withRuleSourceAccount = template.replace(
+      "ScheduleExpression: rate(5 minutes)",
+      `ScheduleExpression: rate(5 minutes)${newline}      SourceAccount: !Ref AWS::AccountId`,
+    );
+    expect(retrySchedulePermission(withRuleSourceAccount).risks).toContain(
+      "SourceAccount would replace the Lambda permission",
+    );
+    expect(() => renderContactTemplate(withRuleSourceAccount, "demo")).toThrow(/SourceAccount/);
+    const withRetainedSourceAccount = template.replace(
+      "  ContactHttpApi:",
+      [
+        "  ContactRetryFunctionRetrySchedulePermission:",
+        "    Type: AWS::Lambda::Permission",
+        "    Properties:",
+        "      SourceAccount: !Ref AWS::AccountId",
+        "      FunctionName: !Ref ContactRetryFunction",
+        "",
+        "  ContactHttpApi:",
+      ].join(newline),
+    );
+    expect(retrySchedulePermission(withRetainedSourceAccount).risks).toContain(
+      "SourceAccount would replace the Lambda permission",
+    );
+    expect(retrySchedulePermission(template).risks).toEqual([]);
+  });
+
+  it("conditions every admin resource on demo and removes them from production", () => {
+    const resources = template.slice(
+      template.indexOf("  # BEGIN DEMO ADMIN RESOURCES"),
+      template.indexOf("  # END DEMO ADMIN RESOURCES"),
+    );
+    const outputs = template.slice(
+      template.indexOf("  # BEGIN DEMO ADMIN OUTPUTS"),
+      template.indexOf("  # END DEMO ADMIN OUTPUTS"),
+    );
+    const adminIds = [
+      "AdminUserPool",
+      "AdminUserPoolClient",
+      "AdminGroup",
+      "AdminAuthorizerLogGroup",
+      "AdminApiLogGroup",
+      "AdminAuthorizerRole",
+      "AdminApiRole",
+      "AdminAuthorizerFunction",
+      "AdminAuthorizerInvokePermission",
+      "AdminApiInvokePermission",
+      "AdminApiFunction",
+      "AdminHttpApi",
+    ];
+    const identityIds = ["AdminUserPool", "AdminUserPoolClient", "AdminGroup"];
+    const apiIds = adminIds.filter((id) => !identityIds.includes(id));
+    expect(resources.match(/Condition: DeployAdminIdentity/g)).toHaveLength(identityIds.length);
+    expect(resources.match(/Condition: DeployAdminApi/g)).toHaveLength(apiIds.length);
+    expect(outputs.match(/Condition: DeployAdminIdentity/g)).toHaveLength(2);
+    expect(outputs.match(/Condition: DeployAdminApi/g)).toHaveLength(2);
+    expect(template).toContain('IsDemo: !Equals [!Ref Environment, "demo"]');
+    expect(template).toContain('IsAdminApiPhase: !Equals [!Ref AdminDeploymentPhase, "api"]');
+    expect(resources).toContain("CodeUri: admin-dist/");
+    expect(resources.match(/CodeUri: admin-dist\//g)).toHaveLength(2);
+    expect(template.match(/^ +CodeUri: dist\/$/gm)).toHaveLength(2);
+    expect(resources).toContain("Handler: handler.authorizer");
+    expect(resources).toContain("Handler: handler.api");
+    expect(resources).toContain("Timeout: 5");
+    expect(resources).toContain("Timeout: 15");
+    expect(resources).toContain("Runtime: nodejs24.x");
+    expect(resources).toContain("arm64");
+    expect(resources).not.toContain("secretsmanager");
+    expect(resources).not.toContain("dynamodb:");
+    expect(resources).not.toContain("LeadsTable");
+    expect(resources).not.toContain("SmtpSecretArn");
+    const production = renderContactTemplate(template, "prod");
+    expect(production.match(/Type: AWS::Serverless::HttpApi/g)).toHaveLength(1);
+    for (const id of adminIds) expect(production).not.toContain(id);
+    expect(production).not.toContain("IsDemo");
+    expect(production).not.toContain("AdminDeploymentPhase");
+    expect(production).not.toContain("DeployAdminIdentity");
+    expect(production).not.toContain("DeployAdminApi");
+    expect(production).not.toContain("admin-dist/");
+    expect(production).not.toContain("SourceAccount");
+    expect(production).not.toContain("DeletionProtection");
+    expect(production).not.toContain("DeletionPolicy");
+    expect(production).not.toContain("UpdateReplacePolicy");
+    expect(production).toContain("Timeout: 30");
+    expect(production).toContain("TableName: occasionfun-co-uk-prod-leads");
+    const demo = renderContactTemplate(template, "demo");
+    expect(demo).toBe(template);
+    expect(demo).toContain("AdminUserPool:");
+    expect(demo).toContain("DeletionProtection: !If [IsAdminApiPhase, ACTIVE, INACTIVE]");
+  });
+
+  it("keeps phase 1 to Cognito and turns deletion protection on only in phase 2", () => {
+    function block(logicalId: string): string {
+      const start = template.indexOf(`  ${logicalId}:`);
+      const next = template.slice(start + 1).search(/\n {2}[A-Za-z]/);
+      return template.slice(start, start + 1 + next);
+    }
+    for (const logicalId of ["AdminUserPool", "AdminUserPoolClient", "AdminGroup"]) {
+      const resource = block(logicalId);
+      expect(resource).toContain("Condition: DeployAdminIdentity");
+      expect(resource).toContain("DeletionPolicy: Delete");
+      expect(resource).toContain("UpdateReplacePolicy: Retain");
+      expect(resource).not.toContain("DeletionPolicy: Retain");
+    }
+    const pool = block("AdminUserPool");
+    expect(pool).toContain("DeletionProtection: !If [IsAdminApiPhase, ACTIVE, INACTIVE]");
+    for (const logicalId of [
+      "AdminAuthorizerFunction",
+      "AdminApiFunction",
+      "AdminHttpApi",
+      "AdminAuthorizerRole",
+      "AdminApiRole",
+    ]) {
+      const resource = block(logicalId);
+      expect(resource).toContain("Condition: DeployAdminApi");
+      expect(resource).not.toContain("UpdateReplacePolicy:");
+      expect(resource).not.toContain("DeletionProtection:");
+    }
+    expect(template).toContain("Default: none");
+    expect(template).toContain('IsAdminIdentityPhase: !Equals [!Ref AdminDeploymentPhase, "identity"]');
+    expect(template).toContain("DeployAdminIdentity: !And");
+    expect(template).not.toMatch(/Condition: IsDemo/);
   });
 });

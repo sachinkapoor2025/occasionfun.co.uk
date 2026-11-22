@@ -13,9 +13,10 @@ const enquirySource = readFileSync(
 );
 
 function allowedOriginsParameter(): string {
-  const match = template.match(/  AllowedOrigins:[\s\S]*?\nConditions:/);
-  if (!match) throw new Error("AllowedOrigins parameter was not found");
-  return match[0];
+  const start = template.indexOf("  AllowedOrigins:");
+  const end = template.indexOf("  # BEGIN DEMO ADMIN PARAMETERS");
+  if (start === -1 || end < start) throw new Error("AllowedOrigins parameter was not found");
+  return template.slice(start, end);
 }
 
 function corsBlock(): string {
@@ -31,7 +32,8 @@ describe("contact API CORS", () => {
     expect(parameter).toContain('AllowedPattern: "^https://[A-Za-z0-9.-]+$"');
     expect(parameter).not.toContain("https://occasionfun.co.uk");
     expect(parameter).not.toContain("amplifyapp.com");
-    expect(template).not.toContain("*");
+    expect(parameter).not.toContain("*");
+    expect(corsBlock()).not.toContain("*");
   });
 
   it("lets API Gateway answer preflight for POST, OPTIONS, and content-type", () => {

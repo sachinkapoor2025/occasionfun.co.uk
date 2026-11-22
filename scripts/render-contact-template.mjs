@@ -16,6 +16,12 @@ const PHYSICAL_NAMES = [
   { property: "FunctionName", key: "retryFunction" },
 ];
 
+/** API Gateway permissions that may name SourceAccount. The contact retry permission may not. */
+const ADMIN_INVOKE_PERMISSION_IDS = new Set([
+  "AdminAuthorizerInvokePermission",
+  "AdminApiInvokePermission",
+]);
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -60,7 +66,9 @@ export function retrySchedulePermission(template) {
   }
   if (declaresPermission) risks.push("demo template declares the retained retry permission");
   if (/^ +Name:/m.test(rule)) risks.push("EventBridge rule name would replace the existing rule");
-  if (template.includes("SourceAccount")) risks.push("SourceAccount would replace the Lambda permission");
+  if (sourceAccountOutsideAdminPermissions(template)) {
+    risks.push("SourceAccount would replace the Lambda permission");
+  }
   if (!rule.includes("ScheduleExpression: rate(5 minutes)")) risks.push("retry schedule changed");
   if (!rule.includes("!GetAtt ContactRetryFunction.Arn")) {
     risks.push("rule target is not the retry function");
@@ -75,6 +83,90 @@ export function retrySchedulePermission(template) {
 
 function declaresRetryPermission(template) {
   return /^ {2}ContactRetryFunctionRetrySchedulePermission:/m.test(template);
+}
+
+const CONTACT_NAMED_RESOURCES = [
+  "LeadsTable",
+  "ContactLogGroup",
+  "ContactRetryLogGroup",
+  "ContactFunction",
+  "ContactRetryFunction",
+];
+
+/** Only contact physical names must stay literals. An admin permission's FunctionName ref is not one of them. */
+function contactPhysicalNameIsIntrinsic(template) {
+  return CONTACT_NAMED_RESOURCES.some((logicalId) =>
+    /^ +(TableName|LogGroupName|FunctionName):\s*[!{]/m.test(resourceBlock(template, logicalId)),
+  );
+}
+
+/**
+ * SourceAccount on the contact retry rule or on any Lambda permission other
+ * than the two demo admin API permissions would replace the retained retry
+ * permission. SourceAccount on those two admin permissions is expected.
+ */
+function sourceAccountOutsideAdminPermissions(template) {
+  const chunks = template.split(/\r?\n(?= {2}[A-Za-z0-9]+:)/);
+  for (const chunk of chunks) {
+    if (!chunk.includes("SourceAccount")) continue;
+    const id = chunk.match(/(?:^|\n) {2}([A-Za-z0-9]+):/)?.[1];
+    if (!id || !ADMIN_INVOKE_PERMISSION_IDS.has(id)) return true;
+  }
+  return false;
+}
+
+function removeMarkedRegion(template, beginLabel, endLabel) {
+  const ending = lineEnding(template);
+  const begin = `  # ${beginLabel}${ending}`;
+  const end = `  # ${endLabel}${ending}`;
+  const start = template.indexOf(begin);
+  const stop = template.indexOf(end);
+  if (start === -1 || stop === -1 || stop < start) {
+    throw new Error(`Demo admin region ${beginLabel} was not found.`);
+  }
+  return template.slice(0, start) + template.slice(stop + end.length);
+}
+
+/** Production rendering drops every demo admin resource, output, condition, and phase parameter. */
+function stripDemoAdmin(template) {
+  let rendered = removeMarkedRegion(
+    template,
+    "BEGIN DEMO ADMIN PARAMETERS",
+    "END DEMO ADMIN PARAMETERS",
+  );
+  rendered = removeMarkedRegion(
+    rendered,
+    "BEGIN DEMO ADMIN CONDITIONS",
+    "END DEMO ADMIN CONDITIONS",
+  );
+  rendered = removeMarkedRegion(
+    rendered,
+    "BEGIN DEMO ADMIN RESOURCES",
+    "END DEMO ADMIN RESOURCES",
+  );
+  rendered = removeMarkedRegion(rendered, "BEGIN DEMO ADMIN OUTPUTS", "END DEMO ADMIN OUTPUTS");
+  for (const leftover of [
+    "IsDemo",
+    "AdminDeploymentPhase",
+    "IsAdminIdentityPhase",
+    "IsAdminApiPhase",
+    "DeployAdminIdentity",
+    "DeployAdminApi",
+    "AdminUserPool",
+    "AdminHttpApi",
+    "admin-dist/",
+    "SourceAccount",
+    "BEGIN DEMO ADMIN",
+    "occasionfun-co-uk-demo-users",
+    "DeletionProtection",
+    "DeletionPolicy",
+    "UpdateReplacePolicy",
+  ]) {
+    if (rendered.includes(leftover)) {
+      throw new Error(`Production template still contains ${leftover}.`);
+    }
+  }
+  return rendered;
 }
 
 function nameProductionRetryRule(template) {
@@ -99,7 +191,7 @@ export function renderContactTemplate(template, environment) {
   if (declaresRetryPermission(template)) {
     throw new Error("The application template must not declare the retry permission.");
   }
-  if (/^ +(TableName|LogGroupName|FunctionName):\s*[!{]/m.test(template)) {
+  if (contactPhysicalNameIsIntrinsic(template)) {
     throw new Error(
       "Physical names must be literals. A conditional name can replace an existing demo resource.",
     );
@@ -141,6 +233,7 @@ export function renderContactTemplate(template, environment) {
         throw new Error(`Production template still contains ${DEMO[key]}.`);
       }
     }
+    rendered = stripDemoAdmin(rendered);
   }
   return rendered;
 }

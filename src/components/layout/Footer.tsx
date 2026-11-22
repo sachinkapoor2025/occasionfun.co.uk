@@ -112,6 +112,14 @@ export function Footer() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link
+                  href="/admin/login/"
+                  className="text-sm text-slate-300 hover:text-white"
+                >
+                  Admin Access
+                </Link>
+              </li>
             </ul>
           </div>
         </div>

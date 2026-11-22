@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Create a CloudFormation change set, inspect the aggregated JSON, then execute it.
+# --no-execute stops after a change set passes the safety check and does not execute it.
 # "No changes to deploy" is the only successful no-op. An empty Changes array is refused.
 # This script does not update Secrets Manager and does not use a guided deployment.
 set -euo pipefail
@@ -28,6 +29,7 @@ EXPECTED_RETRY_LOG_GROUP=""
 EXPECTED_API_ID=""
 EXPECTED_ENDPOINT=""
 CHECK_ONLY="false"
+NO_EXECUTE="false"
 REQUESTED_ROLE_ARN=""
 ROLE_ARN=""
 DEMO_CLOUDFORMATION_ROLE_ARN="arn:aws:iam::796174527529:role/occasionfun-cloudformation-demo"
@@ -48,6 +50,7 @@ while [ "$#" -gt 0 ]; do
     --expected-endpoint) EXPECTED_ENDPOINT="$2"; shift 2 ;;
     --role-arn) REQUESTED_ROLE_ARN="$2"; shift 2 ;;
     --check-only) CHECK_ONLY="true"; shift ;;
+    --no-execute) NO_EXECUTE="true"; shift ;;
     *)
       echo "Unknown argument: $1"
       exit 1
@@ -325,6 +328,12 @@ if ! run_node "$ROOT/scripts/assert-safe-change-set.mjs" --mode "$change_mode" -
   echo "Deleting the unexecuted change set."
   aws cloudformation delete-change-set --change-set-name "$arn" --region "$AWS_REGION" || true
   exit 1
+fi
+
+if [ "$NO_EXECUTE" = "true" ]; then
+  echo "Change set passed the safety check and was not executed."
+  echo "Change set ARN: ${arn}"
+  exit 0
 fi
 
 aws cloudformation execute-change-set --change-set-name "$arn" --region "$AWS_REGION"

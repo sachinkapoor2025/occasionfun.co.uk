@@ -7,8 +7,38 @@ function publicValues(current) {
   );
 }
 
+const ADMIN_ENV_KEYS = [
+  "NEXT_PUBLIC_COGNITO_REGION",
+  "NEXT_PUBLIC_COGNITO_POOL_ID",
+  "NEXT_PUBLIC_COGNITO_CLIENT_ID",
+  "NEXT_PUBLIC_ADMIN_API_BASE",
+];
+
 function mentionsApi(value, target) {
   return value === target.endpoint || value.includes(target.apiId);
+}
+
+function mentionsDemoAdmin(value) {
+  return [DEMO.adminApiId, DEMO.adminApiBase, DEMO.cognitoPoolId, DEMO.cognitoClientId].some(
+    (marker) => value.includes(marker),
+  );
+}
+
+function demoAdminEnv(current) {
+  return {
+    NEXT_PUBLIC_COGNITO_REGION: current.NEXT_PUBLIC_COGNITO_REGION || DEMO.cognitoRegion,
+    NEXT_PUBLIC_COGNITO_POOL_ID: current.NEXT_PUBLIC_COGNITO_POOL_ID || DEMO.cognitoPoolId,
+    NEXT_PUBLIC_COGNITO_CLIENT_ID: current.NEXT_PUBLIC_COGNITO_CLIENT_ID || DEMO.cognitoClientId,
+    NEXT_PUBLIC_ADMIN_API_BASE: current.NEXT_PUBLIC_ADMIN_API_BASE || DEMO.adminApiBase,
+  };
+}
+
+function passedAdminEnv(current) {
+  const admin = {};
+  for (const key of ADMIN_ENV_KEYS) {
+    if (typeof current[key] === "string" && current[key]) admin[key] = current[key];
+  }
+  return admin;
 }
 
 function refuseApi(branch, label) {
@@ -34,11 +64,15 @@ export function resolvePublicEnv(branch, current = {}) {
     return {
       NEXT_PUBLIC_CONTACT_ENDPOINT: endpoint || DEMO.endpoint,
       NEXT_PUBLIC_SITE_URL: site || DEMO.siteUrl,
+      ...demoAdminEnv(current),
     };
   }
 
   if (values.some(([, value]) => mentionsApi(value, DEMO))) {
     refuseApi(name, "demo");
+  }
+  if (values.some(([, value]) => mentionsDemoAdmin(value))) {
+    throw new Error(`Amplify branch "${name || "(unset)"}" refused the demo administration API.`);
   }
 
   if (name === "main" || name === "master") {
@@ -53,21 +87,24 @@ export function resolvePublicEnv(branch, current = {}) {
     return {
       NEXT_PUBLIC_CONTACT_ENDPOINT: PRODUCTION.endpoint,
       NEXT_PUBLIC_SITE_URL: site || PRODUCTION.siteUrl,
+      ...passedAdminEnv(current),
     };
   }
 
   return {
     NEXT_PUBLIC_CONTACT_ENDPOINT: endpoint,
     NEXT_PUBLIC_SITE_URL: site,
+    ...passedAdminEnv(current),
   };
 }
 
 export function renderPublicEnv(branch, env) {
   const resolved = resolvePublicEnv(branch, env);
   const lines = [];
+  const managed = new Set(["NEXT_PUBLIC_CONTACT_ENDPOINT", "NEXT_PUBLIC_SITE_URL", ...ADMIN_ENV_KEYS]);
   for (const [key, value] of Object.entries(env)) {
     if (!key.startsWith("NEXT_PUBLIC_") || !value) continue;
-    if (key === "NEXT_PUBLIC_CONTACT_ENDPOINT" || key === "NEXT_PUBLIC_SITE_URL") continue;
+    if (managed.has(key)) continue;
     lines.push(`${key}=${value}`);
   }
   if (resolved.NEXT_PUBLIC_CONTACT_ENDPOINT) {
@@ -75,6 +112,9 @@ export function renderPublicEnv(branch, env) {
   }
   if (resolved.NEXT_PUBLIC_SITE_URL) {
     lines.push(`NEXT_PUBLIC_SITE_URL=${resolved.NEXT_PUBLIC_SITE_URL}`);
+  }
+  for (const key of ADMIN_ENV_KEYS) {
+    if (resolved[key]) lines.push(`${key}=${resolved[key]}`);
   }
   return `${lines.join("\n")}\n`;
 }

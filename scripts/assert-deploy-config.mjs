@@ -74,6 +74,13 @@ export function assertDeployConfig(input) {
   if (input.parameters.AllowedOrigins?.includes("*")) {
     errors.push("Wildcard origins are not allowed.");
   }
+  const adminPhase = input.parameters.AdminDeploymentPhase;
+  if (adminPhase && !["none", "identity", "api"].includes(adminPhase)) {
+    errors.push("AdminDeploymentPhase must be none, identity, or api.");
+  }
+  if (input.environment === "prod" && adminPhase) {
+    errors.push("Production parameters must not select an admin deployment phase.");
+  }
   if (input.environment === "demo") {
     if (input.expectedApiId !== DEMO.apiId) errors.push("Demo API id must stay 0e6zpkvbkj.");
     if (input.expectedEndpoint !== DEMO.endpoint) {

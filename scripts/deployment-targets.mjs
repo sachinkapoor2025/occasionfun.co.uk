@@ -29,6 +29,11 @@ export const DEMO = {
   siteUrl: "https://demo.d2oib89bmco9su.amplifyapp.com",
   amplifyAppId: "d2oib89bmco9su",
   amplifyBranch: "demo",
+  cognitoRegion: "eu-west-2",
+  cognitoPoolId: "eu-west-2_Pw5MnHIuu",
+  cognitoClientId: "2coqaaar11pbtkrmqb7geprem9",
+  adminApiId: "0yjlr5feea",
+  adminApiBase: "https://0yjlr5feea.execute-api.eu-west-2.amazonaws.com",
   origins: [
     "https://occasionfun.co.uk",
     "https://www.occasionfun.co.uk",
