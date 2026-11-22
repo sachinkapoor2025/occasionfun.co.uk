@@ -52,6 +52,9 @@ jobs:
       - name: Install contact API dependencies
         run: npm ci --prefix infra/contact-api
 
+      - name: Install admin API dependencies
+        run: npm ci --prefix infra/admin
+
       - name: Lint
         run: npm run lint
 
@@ -70,6 +73,12 @@ jobs:
       - name: Test contact API
         run: npm test --prefix infra/contact-api
 
+      - name: Typecheck admin API
+        run: npm run typecheck --prefix infra/admin
+
+      - name: Test admin API
+        run: npm test --prefix infra/admin
+
       - name: Install SAM CLI
         uses: aws-actions/setup-sam@f84ec7d548307efafe33230528756de3c5841a17 # v2
         with:
@@ -77,9 +86,6 @@ jobs:
 
       - name: Build contact API bundle
         run: npm run build --prefix infra/contact-api
-
-      - name: Install admin API dependencies
-        run: npm ci --prefix infra/admin
 
       - name: Build admin API bundle
         run: npm run build --prefix infra/admin
