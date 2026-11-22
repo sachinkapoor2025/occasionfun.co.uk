@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const architecture = readFileSync(
   path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
-    "../docs/admin-chatbot/technical-architecture.md",
+    "./fixtures/admin-session-limits.md",
   ),
   "utf8",
 );
