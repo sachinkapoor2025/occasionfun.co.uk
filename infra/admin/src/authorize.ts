@@ -8,7 +8,23 @@ const BEARER =
   /^Bearer ([A-Za-z0-9_-]+=*\.[A-Za-z0-9_-]+=*\.[A-Za-z0-9_-]+=*)$/i;
 const SUBJECT = /^[A-Za-z0-9_-]{1,128}$/;
 const SAFE_ERROR_NAME = /^[A-Za-z][A-Za-z0-9]{0,80}$/;
+const SAFE_ERROR_CODE = /^ERR_[A-Z0-9_]{1,60}$/;
 const MAX_HEADER_LENGTH = 12_000;
+const MAX_ERROR_DETAIL = 180;
+const RECEIVED = "(?:undefined|null)";
+const KEY_TYPES =
+  "string or an instance of ArrayBuffer, Buffer, TypedArray, DataView, KeyObject, or CryptoKey";
+
+// Full-message allowlist. Node otherwise interpolates the received value, which can be key material.
+const SAFE_ERROR_DETAILS: readonly RegExp[] = [
+  /^Invalid JWK (?:format|RSA key|EC key|OKP key)$/,
+  /^Invalid key object type (?:public|private|secret), expected (?:private|public|secret|private or public)\.$/,
+  new RegExp(`^The "algorithm" argument must be of type string\\. Received ${RECEIVED}$`),
+  new RegExp(
+    `^The "(?:key|key\\.key)" (?:argument|property) must be of type (?:object|${KEY_TYPES})\\. Received ${RECEIVED}$`,
+  ),
+  /^The property 'options\.dsaEncoding' is invalid\. Received '(?:der|ieee-p1363)'$/,
+];
 
 export type Decision =
   | { outcome: "allow"; sub: string }
@@ -20,6 +36,8 @@ export type Decision =
       outcome: "unauthorized";
       reason: "invalid_token";
       errorName?: string;
+      errorCode?: string;
+      errorDetail?: string;
     }
   | { outcome: "forbidden"; reason: "missing_admin_group" };
 
@@ -87,6 +105,20 @@ function subject(value: unknown): string | null {
   return typeof value === "string" && SUBJECT.test(value) ? value : null;
 }
 
+function verificationDiagnostic(error: unknown): {
+  errorCode?: string;
+  errorDetail?: string;
+} {
+  if (!(error instanceof Error)) return {};
+  const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
+  const allowed = SAFE_ERROR_DETAILS.some((pattern) => pattern.test(error.message));
+  const detail = allowed ? error.message.slice(0, MAX_ERROR_DETAIL) : undefined;
+  return {
+    ...(code && SAFE_ERROR_CODE.test(code) ? { errorCode: code } : {}),
+    ...(detail ? { errorDetail: detail } : {}),
+  };
+}
+
 export async function decide(
   authorizationHeader: string | undefined,
   config: AuthConfig | null,
@@ -109,8 +141,11 @@ export async function decide(
       return { outcome: "unauthorized", reason: "jwks_unavailable" };
     }
     const errorName = errorClassName(error);
-    return errorName
-      ? { outcome: "unauthorized", reason: "invalid_token", errorName }
-      : { outcome: "unauthorized", reason: "invalid_token" };
+    return {
+      outcome: "unauthorized",
+      reason: "invalid_token",
+      ...(errorName ? { errorName } : {}),
+      ...verificationDiagnostic(error),
+    };
   }
 }

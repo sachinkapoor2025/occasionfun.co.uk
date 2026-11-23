@@ -344,6 +344,280 @@ describe("access-token authorisation", () => {
       expect(logged).not.toContain("errorName");
     }
   });
+
+  // The fetcher throws before verification, so this checks the log filter only.
+  it("logs a TypeError code and allowlisted detail while staying at 401", async () => {
+    const keys = await tokenFixture();
+    vi.stubEnv("ENVIRONMENT", "demo");
+    vi.stubEnv("COGNITO_REGION", "eu-west-2");
+    vi.stubEnv("COGNITO_USER_POOL_ID", DEMO_POOL);
+    vi.stubEnv("COGNITO_CLIENT_ID", DEMO_CLIENT);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+      { issuer },
+    );
+    const cases = [
+      {
+        message: 'The "algorithm" argument must be of type string. Received undefined',
+        code: "ERR_INVALID_ARG_TYPE",
+      },
+      {
+        message: "Invalid JWK format",
+        code: "ERR_CRYPTO_INVALID_JWK",
+      },
+    ] as const;
+    for (const [index, item] of cases.entries()) {
+      const failure = new TypeError(item.message);
+      Object.defineProperty(failure, "code", { value: item.code });
+      const result = await authorizer(
+        {
+          headers: { authorization: `Bearer ${token}` },
+          requestContext: { requestId: `req-type-${index}` },
+        },
+        {
+          async fetch() {
+            throw failure;
+          },
+        },
+      );
+      expect(result).toEqual({ errorMessage: "Unauthorized" });
+      const logged = String(info.mock.calls.at(-1)?.[0]);
+      expect(JSON.parse(logged)).toEqual({
+        requestId: `req-type-${index}`,
+        route: "authorizer",
+        status: 401,
+        error: "invalid_token",
+        errorName: "TypeError",
+        errorCode: item.code,
+        errorDetail: item.message,
+      });
+      expect(JSON.parse(logged)).not.toHaveProperty("verificationStage");
+      expect(logged).not.toContain(token);
+      expect(item.message.length).toBeLessThanOrEqual(180);
+    }
+  });
+
+  it("omits error text that contains a JWT or a bearer token", async () => {
+    const keys = await tokenFixture();
+    vi.stubEnv("ENVIRONMENT", "demo");
+    vi.stubEnv("COGNITO_REGION", "eu-west-2");
+    vi.stubEnv("COGNITO_USER_POOL_ID", DEMO_POOL);
+    vi.stubEnv("COGNITO_CLIENT_ID", DEMO_CLIENT);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+      { issuer },
+    );
+    const planted = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0In0.c2lnbmF0dXJl";
+    const bearer = `Bearer ${planted}`;
+    const className = "SecretClassName";
+    const failures = [
+      { message: `verification failed for ${planted}`, code: "ERR_INVALID_ARG_TYPE" },
+      { message: bearer, code: planted },
+      {
+        message: `The "algorithm" argument must be of type string. Received an instance of ${className}`,
+        code: "ERR_INVALID_ARG_TYPE",
+      },
+      {
+        message: 'The "key.key" property must be of type object. Received type string (\'not-a-key\')',
+        code: "ERR_INVALID_ARG_TYPE",
+      },
+    ];
+    for (const [index, item] of failures.entries()) {
+      const failure = new TypeError(item.message);
+      Object.defineProperty(failure, "code", { value: item.code });
+      const result = await authorizer(
+        {
+          headers: { authorization: `Bearer ${token}` },
+          requestContext: { requestId: `req-redact-${index}` },
+        },
+        {
+          async fetch() {
+            throw failure;
+          },
+        },
+      );
+      expect(result).toEqual({ errorMessage: "Unauthorized" });
+      const logged = String(info.mock.calls.at(-1)?.[0]);
+      const parsed = JSON.parse(logged) as Record<string, unknown>;
+      expect(parsed.status).toBe(401);
+      expect(parsed.error).toBe("invalid_token");
+      expect(parsed.errorName).toBe("TypeError");
+      expect(parsed).not.toHaveProperty("errorDetail");
+      expect(parsed).not.toHaveProperty("verificationStage");
+      expect(logged).not.toContain(token);
+      expect(logged).not.toContain(planted);
+      expect(logged).not.toContain(bearer);
+      expect(logged).not.toContain("Bearer");
+      expect(logged).not.toContain(className);
+      expect(logged).not.toContain("not-a-key");
+    }
+    const withCode = JSON.parse(String(info.mock.calls[0]?.[0])) as Record<string, unknown>;
+    expect(withCode.errorCode).toBe("ERR_INVALID_ARG_TYPE");
+    const withoutCode = JSON.parse(String(info.mock.calls[1]?.[0])) as Record<string, unknown>;
+    expect(withoutCode).not.toHaveProperty("errorCode");
+  });
+
+  it("verifies generated tokens against controlled JWKS responses", async () => {
+    const keys = await tokenFixture();
+    vi.stubEnv("ENVIRONMENT", "demo");
+    vi.stubEnv("COGNITO_REGION", "eu-west-2");
+    vi.stubEnv("COGNITO_USER_POOL_ID", DEMO_POOL);
+    vi.stubEnv("COGNITO_CLIENT_ID", DEMO_CLIENT);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const adminClaims = { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] };
+    const admin = await signToken(keys.privateKey, adminClaims, { issuer });
+    const member = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["readers"] },
+      { issuer },
+    );
+    const forged = await signToken(keys.otherPrivateKey, adminClaims, { issuer });
+    const bytes = (body: string) => {
+      const encoded = Buffer.from(body);
+      return {
+        async fetch() {
+          return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength);
+        },
+      };
+    };
+    const coordinate = "bad-x-coordinate";
+    const scenarios = [
+      {
+        id: "admin",
+        token: admin,
+        fetcher: keys.fetcher,
+        result: {
+          isAuthorized: true,
+          context: { sub: "11111111-2222-4333-8444-555555555555", hasAdmin: "true" },
+        },
+        log: { requestId: "req-real-admin", route: "authorizer", status: 200 },
+        hidden: [] as string[],
+      },
+      {
+        id: "member",
+        token: member,
+        fetcher: keys.fetcher,
+        result: { isAuthorized: false },
+        log: {
+          requestId: "req-real-member",
+          route: "authorizer",
+          status: 403,
+          error: "missing_admin_group",
+        },
+        hidden: [] as string[],
+      },
+      {
+        id: "forged",
+        token: forged,
+        fetcher: keys.fetcher,
+        result: { errorMessage: "Unauthorized" },
+        log: {
+          requestId: "req-real-forged",
+          route: "authorizer",
+          status: 401,
+          error: "invalid_token",
+          errorName: "JwtInvalidSignatureError",
+        },
+        hidden: ["Invalid signature"],
+      },
+      {
+        id: "jwks-text",
+        token: admin,
+        fetcher: bytes("not-json"),
+        result: { errorMessage: "Unauthorized" },
+        log: {
+          requestId: "req-real-jwks-text",
+          route: "authorizer",
+          status: 401,
+          error: "jwks_unavailable",
+        },
+        hidden: ["not-json", "SyntaxError"],
+      },
+      {
+        id: "missing-modulus",
+        token: admin,
+        fetcher: bytes(JSON.stringify({ keys: [{ kty: "RSA", kid: "test-key", use: "sig", e: "AQAB" }] })),
+        result: { errorMessage: "Unauthorized" },
+        log: {
+          requestId: "req-real-modulus",
+          route: "authorizer",
+          status: 401,
+          error: "invalid_token",
+          errorName: "JwkValidationError",
+        },
+        hidden: ["Missing modulus"],
+      },
+      {
+        id: "bad-rsa-modulus",
+        token: admin,
+        fetcher: bytes(
+          JSON.stringify({
+            keys: [{ kty: "RSA", kid: "test-key", use: "sig", alg: "RS256", n: "@@@", e: "AQAB" }],
+          }),
+        ),
+        result: { errorMessage: "Unauthorized" },
+        log: {
+          requestId: "req-real-rsa",
+          route: "authorizer",
+          status: 401,
+          error: "invalid_token",
+          errorName: "JwtInvalidSignatureError",
+        },
+        hidden: ["@@@", "TypeError"],
+      },
+      {
+        id: "bad-ec-key",
+        token: admin,
+        fetcher: bytes(
+          JSON.stringify({
+            keys: [
+              {
+                kty: "EC",
+                crv: "P-256",
+                x: coordinate,
+                y: "bad-y-coordinate",
+                kid: "test-key",
+                use: "sig",
+              },
+            ],
+          }),
+        ),
+        result: { errorMessage: "Unauthorized" },
+        log: {
+          requestId: "req-real-ec",
+          route: "authorizer",
+          status: 401,
+          error: "invalid_token",
+          errorName: "TypeError",
+          errorCode: "ERR_CRYPTO_INVALID_JWK",
+          errorDetail: "Invalid JWK EC key",
+        },
+        hidden: [coordinate, "bad-y-coordinate"],
+      },
+    ] as const;
+
+    for (const scenario of scenarios) {
+      const result = await authorizer(
+        {
+          headers: { authorization: `Bearer ${scenario.token}` },
+          requestContext: { requestId: scenario.log.requestId },
+        },
+        scenario.fetcher,
+      );
+      expect(result).toEqual(scenario.result);
+      const logged = String(info.mock.calls.at(-1)?.[0]);
+      const parsed = JSON.parse(logged) as Record<string, unknown>;
+      expect(parsed).toEqual(scenario.log);
+      expect(parsed).not.toHaveProperty("verificationStage");
+      expect(logged).not.toContain(scenario.token);
+      expect(logged).not.toContain("Bearer");
+      for (const hidden of scenario.hidden) expect(logged).not.toContain(hidden);
+    }
+  });
 });
 
 describe("environment configuration", () => {

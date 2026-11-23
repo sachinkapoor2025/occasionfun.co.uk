@@ -59,15 +59,16 @@ export async function authorizer(
     readAuthConfig(),
     fetcher,
   );
+  const invalidToken =
+    decision.outcome === "unauthorized" && decision.reason === "invalid_token";
   logEvent({
     requestId,
     route: "authorizer",
     status: statusFor(decision),
     error: decision.outcome === "allow" ? undefined : decision.reason,
-    errorName:
-      decision.outcome === "unauthorized" && decision.reason === "invalid_token"
-        ? decision.errorName
-        : undefined,
+    errorName: invalidToken ? decision.errorName : undefined,
+    errorCode: invalidToken ? decision.errorCode : undefined,
+    errorDetail: invalidToken ? decision.errorDetail : undefined,
   });
   return authorizerResponse(decision);
 }

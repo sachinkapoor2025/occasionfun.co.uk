@@ -24,6 +24,8 @@ export function logEvent(entry: {
   status: number;
   error?: string;
   errorName?: string;
+  errorCode?: string;
+  errorDetail?: string;
 }): void {
   const payload: Record<string, string | number> = {
     requestId: entry.requestId,
@@ -32,5 +34,7 @@ export function logEvent(entry: {
   };
   if (entry.error) payload.error = entry.error;
   if (entry.errorName) payload.errorName = entry.errorName;
+  if (entry.errorCode) payload.errorCode = entry.errorCode;
+  if (entry.errorDetail) payload.errorDetail = entry.errorDetail;
   console.info(JSON.stringify(payload));
 }
