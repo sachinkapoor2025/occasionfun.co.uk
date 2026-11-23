@@ -17,19 +17,26 @@ type ListState =
   | { status: "error" }
   | { status: "ready"; items: Enquiry[]; cursor: string | null };
 
+type FetchedList = {
+  key: string;
+  result: Exclude<ListState, { status: "loading" }>;
+};
+
 export function EnquiryBoard({ onUnauthorised }: { onUnauthorised: () => void }) {
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>("pending");
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
   const [history, setHistory] = useState<(string | null)[]>([]);
-  const [list, setList] = useState<ListState>({ status: "loading" });
+  const [fetchedList, setFetchedList] = useState<FetchedList | null>(null);
   const [reload, setReload] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const listKey = `${notificationStatus}\u0000${appliedSearch}\u0000${cursor ?? ""}\u0000${reload}`;
+  const list: ListState = fetchedList?.key === listKey ? fetchedList.result : { status: "loading" };
 
   useEffect(() => {
     let cancelled = false;
-    setList({ status: "loading" });
+    const key = listKey;
     void (async () => {
       const access = await currentAccessToken();
       if (cancelled) return;
@@ -48,15 +55,18 @@ export function EnquiryBoard({ onUnauthorised }: { onUnauthorised: () => void })
         return;
       }
       if (result.status !== "ok") {
-        setList({ status: "error" });
+        setFetchedList({ key, result: { status: "error" } });
         return;
       }
-      setList({ status: "ready", items: result.items, cursor: result.cursor });
+      setFetchedList({
+        key,
+        result: { status: "ready", items: result.items, cursor: result.cursor },
+      });
     })();
     return () => {
       cancelled = true;
     };
-  }, [notificationStatus, appliedSearch, cursor, reload, onUnauthorised]);
+  }, [listKey, notificationStatus, appliedSearch, cursor, onUnauthorised]);
 
   function applySearch(event: FormEvent) {
     event.preventDefault();
@@ -195,11 +205,16 @@ export function EnquiryBoard({ onUnauthorised }: { onUnauthorised: () => void })
           id={selectedId}
           onUnauthorised={onUnauthorised}
           onUpdated={(enquiry) => {
-            setList((current) =>
-              current.status === "ready"
+            setFetchedList((current) =>
+              current?.key === listKey && current.result.status === "ready"
                 ? {
                     ...current,
-                    items: current.items.map((item) => (item.id === enquiry.id ? { ...item, reviewStatus: enquiry.reviewStatus } : item)),
+                    result: {
+                      ...current.result,
+                      items: current.result.items.map((item) =>
+                        item.id === enquiry.id ? { ...item, reviewStatus: enquiry.reviewStatus } : item,
+                      ),
+                    },
                   }
                 : current,
             );
@@ -219,13 +234,16 @@ function EnquiryDetail({
   onUnauthorised: () => void;
   onUpdated: (enquiry: Enquiry) => void;
 }) {
-  const [state, setState] = useState<"loading" | "missing" | "error" | Enquiry>("loading");
+  const [fetched, setFetched] = useState<
+    { id: string; state: "missing" | "error" | Enquiry } | null
+  >(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const state = fetched?.id === id ? fetched.state : "loading";
 
   useEffect(() => {
     let cancelled = false;
-    setState("loading");
+    const enquiryId = id;
     void (async () => {
       const access = await currentAccessToken();
       if (cancelled) return;
@@ -233,21 +251,21 @@ function EnquiryDetail({
         onUnauthorised();
         return;
       }
-      const result = await fetchEnquiry(access.token, id);
+      const result = await fetchEnquiry(access.token, enquiryId);
       if (cancelled) return;
       if (result.status === "unauthorized") {
         onUnauthorised();
         return;
       }
       if (result.status === "missing") {
-        setState("missing");
+        setFetched({ id: enquiryId, state: "missing" });
         return;
       }
       if (result.status !== "ok") {
-        setState("error");
+        setFetched({ id: enquiryId, state: "error" });
         return;
       }
-      setState(result.enquiry);
+      setFetched({ id: enquiryId, state: result.enquiry });
     })();
     return () => {
       cancelled = true;
@@ -273,7 +291,7 @@ function EnquiryDetail({
       setSaveError(true);
       return;
     }
-    setState(result.enquiry);
+    setFetched({ id, state: result.enquiry });
     onUpdated(result.enquiry);
   }
 
