@@ -345,7 +345,7 @@ describe("access-token authorisation", () => {
     }
   });
 
-  // The fetcher throws before verification, so this checks the log filter only.
+  // The fetcher throws during JWKS retrieval, before the key is imported.
   it("logs a TypeError code and allowlisted detail while staying at 401", async () => {
     const keys = await tokenFixture();
     vi.stubEnv("ENVIRONMENT", "demo");
@@ -392,8 +392,8 @@ describe("access-token authorisation", () => {
         errorName: "TypeError",
         errorCode: item.code,
         errorDetail: item.message,
+        verificationStage: "jwks",
       });
-      expect(JSON.parse(logged)).not.toHaveProperty("verificationStage");
       expect(logged).not.toContain(token);
       expect(item.message.length).toBeLessThanOrEqual(180);
     }
@@ -446,8 +446,20 @@ describe("access-token authorisation", () => {
       expect(parsed.status).toBe(401);
       expect(parsed.error).toBe("invalid_token");
       expect(parsed.errorName).toBe("TypeError");
-      expect(parsed).not.toHaveProperty("errorDetail");
-      expect(parsed).not.toHaveProperty("verificationStage");
+      expect(parsed.verificationStage).toBe("jwks");
+      if (index === 0) {
+        expect(parsed.errorDetail).toBe("verification failed for [redacted]");
+      } else if (index === 1) {
+        expect(parsed).not.toHaveProperty("errorDetail");
+      } else if (index === 2) {
+        expect(parsed.errorDetail).toBe(
+          'The "algorithm" argument must be of type string. Received [redacted]',
+        );
+      } else {
+        expect(parsed.errorDetail).toBe(
+          'The "key.key" property must be of type object. Received [redacted]',
+        );
+      }
       expect(logged).not.toContain(token);
       expect(logged).not.toContain(planted);
       expect(logged).not.toContain(bearer);
@@ -459,6 +471,51 @@ describe("access-token authorisation", () => {
     expect(withCode.errorCode).toBe("ERR_INVALID_ARG_TYPE");
     const withoutCode = JSON.parse(String(info.mock.calls[1]?.[0])) as Record<string, unknown>;
     expect(withoutCode).not.toHaveProperty("errorCode");
+  });
+
+  it("redacts long key material from a TypeError and keeps the safe prefix", async () => {
+    const keys = await tokenFixture();
+    vi.stubEnv("ENVIRONMENT", "demo");
+    vi.stubEnv("COGNITO_REGION", "eu-west-2");
+    vi.stubEnv("COGNITO_USER_POOL_ID", DEMO_POOL);
+    vi.stubEnv("COGNITO_CLIENT_ID", DEMO_CLIENT);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+      { issuer },
+    );
+    const material = "A".repeat(80);
+    const pem = `-----BEGIN PUBLIC KEY-----\n${material}\n-----END PUBLIC KEY-----`;
+    const failure = new TypeError(`Invalid JWK RSA key ${pem}`);
+    Object.defineProperty(failure, "code", { value: "ERR_CRYPTO_INVALID_JWK" });
+    const result = await authorizer(
+      {
+        headers: { authorization: `Bearer ${token}` },
+        requestContext: { requestId: "req-redact-material" },
+      },
+      {
+        async fetch() {
+          throw failure;
+        },
+      },
+    );
+    expect(result).toEqual({ errorMessage: "Unauthorized" });
+    const logged = String(info.mock.calls.at(-1)?.[0]);
+    expect(JSON.parse(logged)).toEqual({
+      requestId: "req-redact-material",
+      route: "authorizer",
+      status: 401,
+      error: "invalid_token",
+      errorName: "TypeError",
+      errorCode: "ERR_CRYPTO_INVALID_JWK",
+      errorDetail: "Invalid JWK RSA key [redacted]",
+      verificationStage: "jwks",
+    });
+    expect(logged).not.toContain(material);
+    expect(logged).not.toContain("BEGIN PUBLIC KEY");
+    expect(logged).not.toContain(token);
+    expect(logged).not.toContain("stack");
   });
 
   it("verifies generated tokens against controlled JWKS responses", async () => {
@@ -595,6 +652,7 @@ describe("access-token authorisation", () => {
           errorName: "TypeError",
           errorCode: "ERR_CRYPTO_INVALID_JWK",
           errorDetail: "Invalid JWK EC key",
+          verificationStage: "import_key",
         },
         hidden: [coordinate, "bad-y-coordinate"],
       },
@@ -612,7 +670,6 @@ describe("access-token authorisation", () => {
       const logged = String(info.mock.calls.at(-1)?.[0]);
       const parsed = JSON.parse(logged) as Record<string, unknown>;
       expect(parsed).toEqual(scenario.log);
-      expect(parsed).not.toHaveProperty("verificationStage");
       expect(logged).not.toContain(scenario.token);
       expect(logged).not.toContain("Bearer");
       for (const hidden of scenario.hidden) expect(logged).not.toContain(hidden);

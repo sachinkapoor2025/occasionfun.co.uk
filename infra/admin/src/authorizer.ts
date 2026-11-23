@@ -69,6 +69,7 @@ export async function authorizer(
     errorName: invalidToken ? decision.errorName : undefined,
     errorCode: invalidToken ? decision.errorCode : undefined,
     errorDetail: invalidToken ? decision.errorDetail : undefined,
+    verificationStage: invalidToken ? decision.verificationStage : undefined,
   });
   return authorizerResponse(decision);
 }

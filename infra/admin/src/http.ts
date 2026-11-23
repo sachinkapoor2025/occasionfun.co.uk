@@ -26,6 +26,7 @@ export function logEvent(entry: {
   errorName?: string;
   errorCode?: string;
   errorDetail?: string;
+  verificationStage?: "parse" | "jwks" | "import_key" | "signature";
 }): void {
   const payload: Record<string, string | number> = {
     requestId: entry.requestId,
@@ -36,5 +37,13 @@ export function logEvent(entry: {
   if (entry.errorName) payload.errorName = entry.errorName;
   if (entry.errorCode) payload.errorCode = entry.errorCode;
   if (entry.errorDetail) payload.errorDetail = entry.errorDetail;
+  if (
+    entry.verificationStage === "parse" ||
+    entry.verificationStage === "jwks" ||
+    entry.verificationStage === "import_key" ||
+    entry.verificationStage === "signature"
+  ) {
+    payload.verificationStage = entry.verificationStage;
+  }
   console.info(JSON.stringify(payload));
 }
