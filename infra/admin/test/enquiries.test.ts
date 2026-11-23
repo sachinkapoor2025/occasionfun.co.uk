@@ -279,6 +279,44 @@ describe("enquiry routes", () => {
     expect(body.enquiry.notificationStatus).toBe("pending");
   });
 
+  it("does not treat the Lambda context as an enquiry store", async () => {
+    configured();
+    vi.stubEnv("LEADS_TABLE_NAME", "");
+    const lambdaContext = {
+      functionName: "occasionfun-co-uk-demo-admin-api",
+      awsRequestId: "lambda-request",
+      callbackWaitsForEmptyEventLoop: true,
+      getRemainingTimeInMillis: () => 30000,
+    };
+
+    const health = await api(adminEvent("GET /health"), lambdaContext);
+    expect(health.statusCode).toBe(200);
+    expect(JSON.parse(health.body).status).toBe("ok");
+
+    const summary = await api(adminEvent("GET /enquiries/summary"), lambdaContext);
+    const list = await api(
+      adminEvent("GET /enquiries", { queryStringParameters: { status: "pending" } }),
+      lambdaContext,
+    );
+    expect(summary.statusCode).toBe(503);
+    expect(JSON.parse(summary.body).error).toBe("enquiry_unavailable");
+    expect(list.statusCode).toBe(503);
+    expect(JSON.parse(list.body).error).toBe("enquiry_unavailable");
+
+    const denied = await api(
+      {
+        routeKey: "GET /enquiries/summary",
+        requestContext: {
+          requestId: "req-context",
+          authorizer: { lambda: { hasAdmin: "false" } },
+        },
+      },
+      lambdaContext,
+    );
+    expect(denied.statusCode).toBe(403);
+    expect(JSON.parse(denied.body).error).toBe("forbidden");
+  });
+
   it("counts real notification statuses for the dashboard", async () => {
     configured();
     const result = await api(adminEvent("GET /enquiries/summary"), {

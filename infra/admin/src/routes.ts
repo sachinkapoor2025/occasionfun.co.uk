@@ -27,7 +27,9 @@ export type ApiEvent = {
 
 type EnquiryRoute = (event: ApiEvent, store: EnquiryStore, requestId: string) => Promise<HttpResult>;
 
-export async function api(event: ApiEvent, store?: EnquiryStore): Promise<HttpResult> {
+export async function api(event: ApiEvent, store?: EnquiryStore): Promise<HttpResult>;
+export async function api(event: ApiEvent, store?: unknown): Promise<HttpResult>;
+export async function api(event: ApiEvent, store?: unknown): Promise<HttpResult> {
   const requestId = event.requestContext?.requestId ?? "unknown";
   const key = routeKey(event);
   const health = key === "GET /health";
@@ -85,8 +87,19 @@ function adminAccess(event: ApiEvent): "allow" | "denied" | "missing" {
   return claim === "true" ? "allow" : "denied";
 }
 
-function storeFor(store: EnquiryStore | undefined): EnquiryStore {
-  if (store) return store;
+function isEnquiryStore(value: unknown): value is EnquiryStore {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.count === "function" &&
+    typeof candidate.list === "function" &&
+    typeof candidate.get === "function" &&
+    typeof candidate.setReview === "function"
+  );
+}
+
+function storeFor(store: unknown): EnquiryStore {
+  if (isEnquiryStore(store)) return store;
   const table = process.env.LEADS_TABLE_NAME?.trim();
   if (!table) throw new EnquiryUnavailable();
   return createDynamoEnquiryStore(table);
