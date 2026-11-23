@@ -369,7 +369,7 @@ Resources:
       FunctionName: occasionfun-co-uk-demo-admin-authorizer
       Role: !GetAtt AdminAuthorizerRole.Arn
       Handler: handler.authorizer
-      Runtime: nodejs24.x
+      Runtime: nodejs22.x
       Architectures:
         - arm64
       MemorySize: 256
