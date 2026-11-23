@@ -1,6 +1,7 @@
+import { clearJwksTransport, installJwksTransport } from "./jwks-transport";
 import { FetchError, NonRetryableFetchError } from "aws-jwt-verify/error";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { authorizer, authorizerResponse } from "../src/authorizer";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { authorizer, authorizeWithFetcher, authorizerResponse } from "../src/authorizer";
 import { decide, resetVerifierCache } from "../src/authorize";
 import { readAuthConfig } from "../src/config";
 import {
@@ -17,6 +18,7 @@ const demo = authConfig();
 const issuer = demo.issuer;
 
 afterEach(() => {
+  clearJwksTransport();
   resetVerifierCache();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
@@ -216,7 +218,7 @@ describe("access-token authorisation", () => {
 
     for (const [index, item] of cases.entries()) {
       const token = await signToken(item.key, item.claims, item.options);
-      const result = await authorizer(
+      const result = await authorizeWithFetcher(
         {
           headers: { authorization: `Bearer ${token}` },
           requestContext: { requestId: `req-name-${index}` },
@@ -250,7 +252,7 @@ describe("access-token authorisation", () => {
       { issuer },
     );
     await expect(
-      authorizer(
+      authorizeWithFetcher(
         {
           headers: { authorization: `Bearer ${token}` },
           requestContext: { requestId: "req-group" },
@@ -282,7 +284,7 @@ describe("access-token authorisation", () => {
       { issuer },
     );
     await expect(
-      authorizer(
+      authorizeWithFetcher(
         {
           headers: { authorization: `Bearer ${token}` },
           requestContext: { requestId: "req-allow" },
@@ -318,7 +320,7 @@ describe("access-token authorisation", () => {
       new NonRetryableFetchError("https://cognito.example/secret-jwks.json", "status 500"),
     ];
     for (const [index, failure] of failures.entries()) {
-      const result = await authorizer(
+      const result = await authorizeWithFetcher(
         {
           headers: { authorization: `Bearer ${token}` },
           requestContext: { requestId: `req-jwks-${index}` },
@@ -371,7 +373,7 @@ describe("access-token authorisation", () => {
     for (const [index, item] of cases.entries()) {
       const failure = new TypeError(item.message);
       Object.defineProperty(failure, "code", { value: item.code });
-      const result = await authorizer(
+      const result = await authorizeWithFetcher(
         {
           headers: { authorization: `Bearer ${token}` },
           requestContext: { requestId: `req-type-${index}` },
@@ -429,7 +431,7 @@ describe("access-token authorisation", () => {
     for (const [index, item] of failures.entries()) {
       const failure = new TypeError(item.message);
       Object.defineProperty(failure, "code", { value: item.code });
-      const result = await authorizer(
+      const result = await authorizeWithFetcher(
         {
           headers: { authorization: `Bearer ${token}` },
           requestContext: { requestId: `req-redact-${index}` },
@@ -489,7 +491,7 @@ describe("access-token authorisation", () => {
     const pem = `-----BEGIN PUBLIC KEY-----\n${material}\n-----END PUBLIC KEY-----`;
     const failure = new TypeError(`Invalid JWK RSA key ${pem}`);
     Object.defineProperty(failure, "code", { value: "ERR_CRYPTO_INVALID_JWK" });
-    const result = await authorizer(
+    const result = await authorizeWithFetcher(
       {
         headers: { authorization: `Bearer ${token}` },
         requestContext: { requestId: "req-redact-material" },
@@ -659,7 +661,7 @@ describe("access-token authorisation", () => {
     ] as const;
 
     for (const scenario of scenarios) {
-      const result = await authorizer(
+      const result = await authorizeWithFetcher(
         {
           headers: { authorization: `Bearer ${scenario.token}` },
           requestContext: { requestId: scenario.log.requestId },
@@ -674,6 +676,151 @@ describe("access-token authorisation", () => {
       expect(logged).not.toContain("Bearer");
       for (const hidden of scenario.hidden) expect(logged).not.toContain(hidden);
     }
+  });
+});
+
+function lambdaContext(): { functionName: string; fetch: () => never } {
+  return {
+    functionName: "occasionfun-co-uk-demo-admin-authorizer",
+    fetch() {
+      throw new Error("lambda-context-must-not-fetch");
+    },
+  };
+}
+
+describe("default Cognito JWKS fetcher", () => {
+  beforeEach(() => {
+    vi.stubEnv("ENVIRONMENT", "demo");
+    vi.stubEnv("COGNITO_REGION", "eu-west-2");
+    vi.stubEnv("COGNITO_USER_POOL_ID", DEMO_POOL);
+    vi.stubEnv("COGNITO_CLIENT_ID", DEMO_CLIENT);
+  });
+
+  it("retrieves JWKS with the package fetcher and allows an admin access token", async () => {
+    const keys = await tokenFixture();
+    const transport = installJwksTransport({ statusCode: 200, body: Buffer.from(keys.jwks) });
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+      { issuer },
+    );
+    const result = await authorizer(
+      {
+        headers: { authorization: `Bearer ${token}` },
+        requestContext: { requestId: "req-default-admin" },
+      },
+      lambdaContext(),
+    );
+    expect(result).toEqual({
+      isAuthorized: true,
+      context: { sub: "11111111-2222-4333-8444-555555555555", hasAdmin: "true" },
+    });
+    expect(transport.urls).toEqual([`${issuer}/.well-known/jwks.json`]);
+    const logged = String(info.mock.calls.at(-1)?.[0]);
+    expect(JSON.parse(logged)).toEqual({
+      requestId: "req-default-admin",
+      route: "authorizer",
+      status: 200,
+    });
+    expect(logged).not.toContain(token);
+    expect(logged).not.toContain(keys.jwks);
+    expect(logged).not.toContain("lambda-context-must-not-fetch");
+  });
+
+  it("returns 403 for a verified access token without the admin group", async () => {
+    const keys = await tokenFixture();
+    installJwksTransport({ statusCode: 200, body: Buffer.from(keys.jwks) });
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["readers"] },
+      { issuer },
+    );
+    await expect(
+      authorizer(
+        {
+          headers: { authorization: `Bearer ${token}` },
+          requestContext: { requestId: "req-default-member" },
+        },
+        lambdaContext(),
+      ),
+    ).resolves.toEqual({ isAuthorized: false });
+    const logged = String(info.mock.calls.at(-1)?.[0]);
+    expect(JSON.parse(logged)).toEqual({
+      requestId: "req-default-member",
+      route: "authorizer",
+      status: 403,
+      error: "missing_admin_group",
+    });
+    expect(logged).not.toContain(token);
+    expect(logged).not.toContain(keys.jwks);
+  });
+
+  it("returns 401 when the signature does not match the retrieved JWKS", async () => {
+    const keys = await tokenFixture();
+    installJwksTransport({ statusCode: 200, body: Buffer.from(keys.jwks) });
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.otherPrivateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+      { issuer },
+    );
+    await expect(
+      authorizer(
+        {
+          headers: { authorization: `Bearer ${token}` },
+          requestContext: { requestId: "req-default-signature" },
+        },
+        lambdaContext(),
+      ),
+    ).resolves.toEqual({ errorMessage: "Unauthorized" });
+    const logged = String(info.mock.calls.at(-1)?.[0]);
+    expect(JSON.parse(logged)).toEqual({
+      requestId: "req-default-signature",
+      route: "authorizer",
+      status: 401,
+      error: "invalid_token",
+      errorName: "JwtInvalidSignatureError",
+    });
+    expect(logged).not.toContain(token);
+    expect(logged).not.toContain(keys.jwks);
+    expect(logged).not.toContain("Invalid signature");
+  });
+
+  it("handles a JWKS retrieval failure without logging the token or the transport error", async () => {
+    const keys = await tokenFixture();
+    const secret = "jwks-transport-secret";
+    const transport = installJwksTransport({ error: new Error(secret) });
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const token = await signToken(
+      keys.privateKey,
+      { token_use: "access", client_id: DEMO_CLIENT, "cognito:groups": ["admin"] },
+      { issuer },
+    );
+    await expect(
+      authorizer(
+        {
+          headers: { authorization: `Bearer ${token}` },
+          requestContext: { requestId: "req-default-jwks" },
+        },
+        lambdaContext(),
+      ),
+    ).resolves.toEqual({ errorMessage: "Unauthorized" });
+    const logged = String(info.mock.calls.at(-1)?.[0]);
+    expect(JSON.parse(logged)).toEqual({
+      requestId: "req-default-jwks",
+      route: "authorizer",
+      status: 401,
+      error: "jwks_unavailable",
+    });
+    expect(transport.urls).toEqual([`${issuer}/.well-known/jwks.json`, `${issuer}/.well-known/jwks.json`]);
+    expect(logged).not.toContain(token);
+    expect(logged).not.toContain(secret);
+    expect(logged).not.toContain(keys.jwks);
+    expect(logged).not.toContain("lambda-context-must-not-fetch");
+    expect(logged).not.toContain("errorDetail");
+    expect(logged).not.toContain("stack");
   });
 });
 
@@ -731,10 +878,10 @@ describe("environment configuration", () => {
       },
     };
     await expect(
-      authorizer({ ...base, identitySource: [], headers: {} }, keys.fetcher),
+      authorizeWithFetcher({ ...base, identitySource: [], headers: {} }, keys.fetcher),
     ).resolves.toEqual({ errorMessage: "Unauthorized" });
     await expect(
-      authorizer(
+      authorizeWithFetcher(
         { ...base, headers: { authorization: "Bearer not-a-token" } },
         keys.fetcher,
       ),
@@ -746,7 +893,7 @@ describe("environment configuration", () => {
       { issuer },
     );
     await expect(
-      authorizer({ ...base, headers: { authorization: `Bearer ${member}` } }, keys.fetcher),
+      authorizeWithFetcher({ ...base, headers: { authorization: `Bearer ${member}` } }, keys.fetcher),
     ).resolves.toEqual({ isAuthorized: false });
 
     const admin = await signToken(
@@ -755,7 +902,7 @@ describe("environment configuration", () => {
       { issuer },
     );
     await expect(
-      authorizer({ ...base, headers: { authorization: `Bearer ${admin}` } }, keys.fetcher),
+      authorizeWithFetcher({ ...base, headers: { authorization: `Bearer ${admin}` } }, keys.fetcher),
     ).resolves.toEqual({
       isAuthorized: true,
       context: { sub: "11111111-2222-4333-8444-555555555555", hasAdmin: "true" },

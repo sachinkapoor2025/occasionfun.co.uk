@@ -49,7 +49,7 @@ export function authorizerResponse(decision: Decision): AuthorizerResult {
   return { errorMessage: "Unauthorized" };
 }
 
-export async function authorizer(
+async function complete(
   event: AuthorizerEvent,
   fetcher?: Fetcher,
 ): Promise<AuthorizerResult> {
@@ -72,4 +72,20 @@ export async function authorizer(
     verificationStage: invalidToken ? decision.verificationStage : undefined,
   });
   return authorizerResponse(decision);
+}
+
+// Lambda calls this as (event, context, callback). The context is not a Fetcher.
+// Verification uses aws-jwt-verify's default SimpleFetcher.
+export async function authorizer(
+  event: AuthorizerEvent,
+  _context?: unknown,
+): Promise<AuthorizerResult> {
+  return complete(event);
+}
+
+export async function authorizeWithFetcher(
+  event: AuthorizerEvent,
+  fetcher: Fetcher,
+): Promise<AuthorizerResult> {
+  return complete(event, fetcher);
 }

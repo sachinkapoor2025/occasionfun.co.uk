@@ -23,6 +23,7 @@ export function authConfig(
 
 export type TokenFixture = {
   fetcher: Fetcher;
+  jwks: string;
   privateKey: CryptoKey;
   otherPrivateKey: CryptoKey;
 };
@@ -38,6 +39,7 @@ export async function tokenFixture(): Promise<TokenFixture> {
   return {
     privateKey: primary.privateKey,
     otherPrivateKey: other.privateKey,
+    jwks: body,
     fetcher: {
       async fetch() {
         return new TextEncoder().encode(body).buffer;
