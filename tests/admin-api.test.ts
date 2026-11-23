@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchAdminHealth } from "../src/lib/admin/api";
+import { fetchAdminHealth, fetchEnquiries, updateEnquiryReview } from "../src/lib/admin/api";
 
 const BASE = "https://0yjlr5feea.execute-api.eu-west-2.amazonaws.com";
 
@@ -74,5 +74,72 @@ describe("admin health client", () => {
       status: "unconfigured",
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+const enquiry = {
+  id: "a".repeat(64),
+  submittedAt: "2026-11-23T09:00:00.000Z",
+  name: "Ada Lovelace",
+  organisation: "Analytical Engines",
+  email: "ada@example.com",
+  phone: null,
+  enquiryType: "Wedding",
+  message: "Hello",
+  messageTruncated: false,
+  notificationStatus: "pending",
+  reviewStatus: "new",
+};
+
+describe("enquiry client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.NEXT_PUBLIC_ADMIN_API_BASE;
+  });
+
+  it("sends the access token on the enquiry list and keeps it out of the URL", async () => {
+    process.env.NEXT_PUBLIC_ADMIN_API_BASE = BASE;
+    const fetchMock = vi.fn(async () =>
+      Response.json({ ok: true, items: [enquiry], cursor: "next-page", requestId: "req-1" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchEnquiries("access-token", { status: "pending", cursor: "next-page", q: "Ada" }),
+    ).resolves.toMatchObject({ status: "ok", cursor: "next-page" });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(url.pathname).toBe("/enquiries");
+    expect(url.searchParams.get("status")).toBe("pending");
+    expect(url.searchParams.get("cursor")).toBe("next-page");
+    expect(url.searchParams.get("q")).toBe("Ada");
+    expect(url.href).not.toContain("access-token");
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer access-token");
+  });
+
+  it("rejects a non-admin list response", async () => {
+    process.env.NEXT_PUBLIC_ADMIN_API_BASE = BASE;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 403 })));
+    await expect(fetchEnquiries("access-token", { status: "pending" })).resolves.toEqual({
+      status: "forbidden",
+    });
+  });
+
+  it("patches review status with the access token", async () => {
+    process.env.NEXT_PUBLIC_ADMIN_API_BASE = BASE;
+    const fetchMock = vi.fn(async () =>
+      Response.json({ ok: true, enquiry: { ...enquiry, reviewStatus: "reviewed" }, requestId: "req-1" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(updateEnquiryReview("access-token", enquiry.id, "reviewed")).resolves.toMatchObject({
+      status: "ok",
+      enquiry: { reviewStatus: "reviewed" },
+    });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(url.pathname).toBe(`/enquiries/${enquiry.id}`);
+    expect(init.method).toBe("PATCH");
+    expect(init.body).toBe(JSON.stringify({ reviewStatus: "reviewed" }));
+    expect(url.href).not.toContain("access-token");
   });
 });

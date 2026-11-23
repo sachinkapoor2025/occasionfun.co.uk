@@ -1,0 +1,281 @@
+import { describe, expect, it, vi } from "vitest";
+import { enquiryStore } from "../src/enquiry-dynamo";
+import { type StoredEnquiry } from "../src/enquiries";
+import { api } from "../src/routes";
+
+const ID = "a".repeat(64);
+const NEXT = "b".repeat(64);
+
+function lead(overrides: Partial<StoredEnquiry> = {}): StoredEnquiry {
+  return {
+    idempotencyKey: ID,
+    createdAt: "2026-11-23T09:00:00.000Z",
+    notificationDueAt: "2026-11-23T09:00:00.000Z",
+    name: "Ada Lovelace",
+    organisation: "Analytical Engines",
+    email: "ada@example.com",
+    phone: null,
+    enquiryType: "Wedding",
+    message: `${"Please plan a celebration. ".repeat(12)}The full text stays on the detail view.`,
+    notificationStatus: "pending",
+    ...overrides,
+  };
+}
+
+function adminEvent(routeKey: string, extra: Record<string, unknown> = {}) {
+  return {
+    routeKey,
+    requestContext: {
+      requestId: "req-enquiry",
+      authorizer: { lambda: { hasAdmin: "true" } },
+    },
+    ...extra,
+  };
+}
+
+function configured() {
+  vi.stubEnv("ENVIRONMENT", "demo");
+  vi.stubEnv("COGNITO_REGION", "eu-west-2");
+  vi.stubEnv("COGNITO_USER_POOL_ID", "eu-west-2_demoPool");
+  vi.stubEnv("COGNITO_CLIENT_ID", "democlient");
+}
+
+describe("enquiry routes", () => {
+  it("lists a page for an admin and returns the DynamoDB continuation key", async () => {
+    configured();
+    const first = lead();
+    const second = lead({ idempotencyKey: NEXT, name: "Grace Hopper" });
+    const seen: unknown[] = [];
+    const result = await api(adminEvent("GET /enquiries", { queryStringParameters: { status: "pending", limit: "1" } }), {
+      count: async () => 0,
+      list: async (query) => {
+        seen.push(query);
+        return { items: [first], cursor: { notificationDueAt: first.notificationDueAt, idempotencyKey: first.idempotencyKey } };
+      },
+      get: async () => null,
+      setReview: async () => null,
+    });
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].name).toBe("Ada Lovelace");
+    expect(body.items[0].messageTruncated).toBe(true);
+    expect(body.items[0].reviewStatus).toBe("new");
+    expect(body.cursor).toEqual(expect.any(String));
+    expect(seen[0]).toMatchObject({ status: "pending", limit: 1 });
+
+    const next = await api(
+      adminEvent("GET /enquiries", { queryStringParameters: { status: "pending", cursor: body.cursor } }),
+      {
+        count: async () => 0,
+        list: async (query) => {
+          expect(query.cursor).toEqual({
+            notificationDueAt: first.notificationDueAt,
+            idempotencyKey: first.idempotencyKey,
+          });
+          return { items: [second] };
+        },
+        get: async () => null,
+        setReview: async () => null,
+      },
+    );
+    expect(JSON.parse(next.body).items[0].name).toBe("Grace Hopper");
+    expect(JSON.parse(next.body).cursor).toBeNull();
+  });
+
+  it("returns an empty page without inventing enquiries", async () => {
+    configured();
+    const result = await api(adminEvent("GET /enquiries", { queryStringParameters: { status: "sent" } }), {
+      count: async () => 0,
+      list: async () => ({ items: [] }),
+      get: async () => null,
+      setReview: async () => null,
+    });
+    expect(JSON.parse(result.body)).toMatchObject({ ok: true, items: [], cursor: null });
+  });
+
+  it("rejects a non-admin before reading enquiries", async () => {
+    configured();
+    const result = await api(
+      {
+        routeKey: "GET /enquiries",
+        queryStringParameters: { status: "pending" },
+        requestContext: {
+          requestId: "req-group",
+          authorizer: { lambda: { hasAdmin: "false" } },
+        },
+      },
+      {
+        count: async () => {
+          throw new Error("store was called");
+        },
+        list: async () => {
+          throw new Error("store was called");
+        },
+        get: async () => {
+          throw new Error("store was called");
+        },
+        setReview: async () => {
+          throw new Error("store was called");
+        },
+      },
+    );
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body).error).toBe("forbidden");
+  });
+
+  it("rejects a missing authoriser context", async () => {
+    configured();
+    const result = await api({
+      routeKey: "GET /enquiries",
+      queryStringParameters: { status: "pending" },
+      requestContext: { requestId: "req-open" },
+    });
+    expect(result.statusCode).toBe(401);
+  });
+
+  it("returns one enquiry with its full message", async () => {
+    configured();
+    const result = await api(
+      adminEvent("GET /enquiries/{idempotencyKey}", { pathParameters: { idempotencyKey: ID } }),
+      {
+        count: async () => 0,
+        list: async () => ({ items: [] }),
+        get: async () => lead({ reviewStatus: "reviewed" }),
+        setReview: async () => null,
+      },
+    );
+    const body = JSON.parse(result.body);
+    expect(result.statusCode).toBe(200);
+    expect(body.enquiry.id).toBe(ID);
+    expect(body.enquiry.messageTruncated).toBe(false);
+    expect(body.enquiry.reviewStatus).toBe("reviewed");
+    expect(body.enquiry.message).toContain("The full text stays on the detail view.");
+  });
+
+  it("reports a missing enquiry", async () => {
+    configured();
+    const result = await api(
+      adminEvent("GET /enquiries/{idempotencyKey}", { pathParameters: { idempotencyKey: ID } }),
+      {
+        count: async () => 0,
+        list: async () => ({ items: [] }),
+        get: async () => null,
+        setReview: async () => null,
+      },
+    );
+    expect(result.statusCode).toBe(404);
+  });
+
+  it("updates review status without changing the notification status", async () => {
+    configured();
+    const stored = lead();
+    const result = await api(
+      adminEvent("PATCH /enquiries/{idempotencyKey}", {
+        pathParameters: { idempotencyKey: ID },
+        body: JSON.stringify({ reviewStatus: "closed" }),
+      }),
+      {
+        count: async () => 0,
+        list: async () => ({ items: [] }),
+        get: async () => stored,
+        setReview: async (id, review) => {
+          expect(id).toBe(ID);
+          expect(review).toBe("closed");
+          return { ...stored, reviewStatus: review, notificationStatus: stored.notificationStatus };
+        },
+      },
+    );
+    const body = JSON.parse(result.body);
+    expect(result.statusCode).toBe(200);
+    expect(body.enquiry.reviewStatus).toBe("closed");
+    expect(body.enquiry.notificationStatus).toBe("pending");
+  });
+
+  it("counts real notification statuses for the dashboard", async () => {
+    configured();
+    const result = await api(adminEvent("GET /enquiries/summary"), {
+      count: async (status) => ({ pending: 2, sending: 0, sent: 5, failed: 1 })[status],
+      list: async () => ({ items: [] }),
+      get: async () => null,
+      setReview: async () => null,
+    });
+    expect(JSON.parse(result.body)).toMatchObject({
+      ok: true,
+      total: 8,
+      byNotificationStatus: { pending: 2, sending: 0, sent: 5, failed: 1 },
+    });
+  });
+});
+
+describe("enquiry DynamoDB access", () => {
+  it("queries the notification index and never scans", async () => {
+    const input: Record<string, unknown>[] = [];
+    const store = enquiryStore("occasionfun-co-uk-leads", {
+      query: async (value) => {
+        input.push(value);
+        return {
+          Items: [lead() as unknown as Record<string, unknown>],
+          LastEvaluatedKey: {
+            notificationStatus: "pending",
+            notificationDueAt: lead().notificationDueAt,
+            idempotencyKey: ID,
+          },
+        };
+      },
+      get: async () => ({ Item: undefined }),
+      update: async () => ({ Attributes: undefined }),
+    });
+    const page = await store.list({
+      status: "pending",
+      limit: 20,
+      q: "ada@example.com",
+      review: "new",
+    });
+    expect(input[0]).toMatchObject({
+      TableName: "occasionfun-co-uk-leads",
+      IndexName: "notification-due",
+      KeyConditionExpression: "#status = :status",
+      ScanIndexForward: false,
+      Limit: 20,
+    });
+    expect(input[0]).not.toHaveProperty("Scan");
+    expect(page.cursor?.idempotencyKey).toBe(ID);
+    expect(page.items[0]?.email).toBe("ada@example.com");
+  });
+
+  it("sets only the review attributes", async () => {
+    let input: Record<string, unknown> = {};
+    const store = enquiryStore("occasionfun-co-uk-leads", {
+      query: async () => ({}),
+      get: async () => ({ Item: undefined }),
+      update: async (value) => {
+        input = value;
+        return { Attributes: { ...lead(), reviewStatus: "reviewed" } as unknown as Record<string, unknown> };
+      },
+    });
+    const updated = await store.setReview(ID, "reviewed", "2026-11-23T10:00:00.000Z");
+    expect(input.UpdateExpression).toBe("SET reviewStatus = :review, reviewUpdatedAt = :now");
+    expect(String(input.UpdateExpression)).not.toContain("notificationStatus");
+    expect(updated?.reviewStatus).toBe("reviewed");
+    expect(updated?.notificationStatus).toBe("pending");
+  });
+
+  it("drops internal mail fields from a read", async () => {
+    const store = enquiryStore("occasionfun-co-uk-leads", {
+      query: async () => ({}),
+      get: async () => ({
+        Item: {
+          ...(lead() as unknown as Record<string, unknown>),
+          sendingOwner: "lock-token",
+          lastNotificationError: "smtp failed",
+        },
+      }),
+      update: async () => ({ Attributes: undefined }),
+    });
+    const found = await store.get(ID);
+    expect(found).not.toHaveProperty("sendingOwner");
+    expect(found).not.toHaveProperty("lastNotificationError");
+    expect(JSON.stringify(found)).not.toContain("smtp");
+  });
+});

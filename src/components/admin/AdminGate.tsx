@@ -12,6 +12,7 @@ import {
   type SessionStatus,
 } from "@/lib/admin/auth";
 import { AuthCard } from "./AuthCard";
+import { AdminPanel, type PanelHealth } from "./panel/AdminPanel";
 
 export const UNAUTHORISED_ADMIN_MESSAGE = "Ask Admin to Provide Access";
 
@@ -90,17 +91,7 @@ export function AdminGate() {
     if (session.status === "unapproved") {
       return <UnauthorisedAccount onSignOut={onSignOut} />;
     }
-    return (
-      <AuthCard title="Administration">
-        <p className="text-sm leading-6 text-slate-600">
-          You are signed in. The administration API is not configured, so no
-          administration request was sent.
-        </p>
-        <Button type="button" className="mt-6 w-full" onClick={onSignOut}>
-          Sign out
-        </Button>
-      </AuthCard>
-    );
+    return <AdminPanel health="unconfigured" onSignOut={onSignOut} />;
   }
 
   return <AdminHealth onSignOut={onSignOut} />;
@@ -125,9 +116,7 @@ function UnauthorisedAccount({
 
 function AdminHealth({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const router = useRouter();
-  const [state, setState] = useState<
-    "loading" | "ok" | "forbidden" | "unavailable"
-  >("loading");
+  const [state, setState] = useState<PanelHealth | "forbidden">("loading");
 
   const load = useCallback(async () => {
     const access = await currentAccessToken();
@@ -157,6 +146,10 @@ function AdminHealth({ onSignOut }: { onSignOut: () => Promise<void> }) {
     setState("unavailable");
   }, [router]);
 
+  const onUnauthorised = useCallback(() => {
+    void logOut().then(() => router.replace("/admin/login/"));
+  }, [router]);
+
   useEffect(() => {
     let cancelled = false;
     Promise.resolve()
@@ -174,30 +167,11 @@ function AdminHealth({ onSignOut }: { onSignOut: () => Promise<void> }) {
   }
 
   return (
-    <AuthCard title="Administration">
-      <p className="text-sm leading-6 text-slate-600">
-        {state === "loading"
-          ? "Checking the administration service…"
-          : state === "ok"
-            ? "The administration service is available."
-            : "The administration service could not be reached."}
-      </p>
-      {state === "ok" ? (
-        <p className="mt-3 text-sm text-slate-600">Status: ok</p>
-      ) : null}
-      {state === "unavailable" ? (
-        <Button type="button" className="mt-6 w-full" onClick={() => void load()}>
-          Try again
-        </Button>
-      ) : null}
-      <Button
-        type="button"
-        className="mt-6 w-full"
-        onClick={onSignOut}
-        disabled={state === "loading"}
-      >
-        Sign out
-      </Button>
-    </AuthCard>
+    <AdminPanel
+      health={state}
+      onSignOut={onSignOut}
+      onRetry={state === "unavailable" ? () => void load() : undefined}
+      onUnauthorised={onUnauthorised}
+    />
   );
 }

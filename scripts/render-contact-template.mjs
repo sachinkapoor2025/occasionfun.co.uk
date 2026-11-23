@@ -20,6 +20,10 @@ const PHYSICAL_NAMES = [
 const ADMIN_INVOKE_PERMISSION_IDS = new Set([
   "AdminAuthorizerInvokePermission",
   "AdminApiInvokePermission",
+  "AdminEnquiryListInvokePermission",
+  "AdminEnquirySummaryInvokePermission",
+  "AdminEnquiryReadInvokePermission",
+  "AdminEnquiryReviewInvokePermission",
 ]);
 
 function escapeRegExp(value) {
@@ -102,8 +106,8 @@ function contactPhysicalNameIsIntrinsic(template) {
 
 /**
  * SourceAccount on the contact retry rule or on any Lambda permission other
- * than the two demo admin API permissions would replace the retained retry
- * permission. SourceAccount on those two admin permissions is expected.
+ * than the demo admin API permissions would replace the retained retry
+ * permission. SourceAccount on those admin permissions is expected.
  */
 function sourceAccountOutsideAdminPermissions(template) {
   const chunks = template.split(/\r?\n(?= {2}[A-Za-z0-9]+:)/);

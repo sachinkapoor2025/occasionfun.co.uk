@@ -5,11 +5,13 @@
   "type": "module",
   "description": "OccasionFun admin API foundation. HTTP API, Lambda authoriser, and protected health route. Not deployed.",
   "scripts": {
-    "build": "esbuild src/handler.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/handler.js",
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/handler.js --external:@aws-sdk/*",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.906.0",
+    "@aws-sdk/lib-dynamodb": "^3.906.0",
     "aws-jwt-verify": "5.2.1"
   },
   "devDependencies": {

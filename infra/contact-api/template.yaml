@@ -360,6 +360,19 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "${AdminApiLogGroup.Arn}:*"
+        - PolicyName: existing-leads-enquiries
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                Resource: !Sub "${LeadsTable.Arn}/index/notification-due"
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt LeadsTable.Arn
 
   AdminAuthorizerFunction:
     Type: AWS::Serverless::Function
@@ -405,6 +418,46 @@ Resources:
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminHttpApi}/$default/GET/health
 
+  AdminEnquiryListInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployAdminApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AdminApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminHttpApi}/$default/GET/enquiries
+
+  AdminEnquirySummaryInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployAdminApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AdminApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminHttpApi}/$default/GET/enquiries/summary
+
+  AdminEnquiryReadInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployAdminApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AdminApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminHttpApi}/$default/GET/enquiries/*
+
+  AdminEnquiryReviewInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployAdminApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AdminApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminHttpApi}/$default/PATCH/enquiries/*
+
   AdminApiFunction:
     Type: AWS::Serverless::Function
     Condition: DeployAdminApi
@@ -419,13 +472,14 @@ Resources:
       MemorySize: 256
       CodeUri: admin-dist/
       Timeout: 15
-      Description: Protected demo admin routes. The first route is GET /health.
+      Description: Protected demo admin routes for health and enquiries.
       Environment:
         Variables:
           ENVIRONMENT: !Ref Environment
           COGNITO_REGION: !Ref AWS::Region
           COGNITO_USER_POOL_ID: !Ref AdminUserPool
           COGNITO_CLIENT_ID: !Ref AdminUserPoolClient
+          LEADS_TABLE_NAME: !Ref LeadsTable
 
   AdminHttpApi:
     Type: AWS::Serverless::HttpApi
@@ -442,6 +496,7 @@ Resources:
           - content-type
         AllowMethods:
           - GET
+          - PATCH
           - OPTIONS
         MaxAge: 600
       DefinitionBody:
@@ -458,6 +513,45 @@ Resources:
         paths:
           /health:
             get:
+              security:
+                - AdminAccessTokenAuthorizer: []
+              x-amazon-apigateway-integration:
+                payloadFormatVersion: "2.0"
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AdminApiFunction.Arn}/invocations
+                timeoutInMillis: 15000
+          /enquiries:
+            get:
+              security:
+                - AdminAccessTokenAuthorizer: []
+              x-amazon-apigateway-integration:
+                payloadFormatVersion: "2.0"
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AdminApiFunction.Arn}/invocations
+                timeoutInMillis: 15000
+          /enquiries/summary:
+            get:
+              security:
+                - AdminAccessTokenAuthorizer: []
+              x-amazon-apigateway-integration:
+                payloadFormatVersion: "2.0"
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AdminApiFunction.Arn}/invocations
+                timeoutInMillis: 15000
+          /enquiries/{idempotencyKey}:
+            get:
+              security:
+                - AdminAccessTokenAuthorizer: []
+              x-amazon-apigateway-integration:
+                payloadFormatVersion: "2.0"
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AdminApiFunction.Arn}/invocations
+                timeoutInMillis: 15000
+            patch:
               security:
                 - AdminAccessTokenAuthorizer: []
               x-amazon-apigateway-integration:

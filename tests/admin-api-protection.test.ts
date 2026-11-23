@@ -117,6 +117,10 @@ describe("admin API default protection", () => {
     expect(permissions.map((permission) => permission.name).sort()).toEqual([
       "AdminApiInvokePermission",
       "AdminAuthorizerInvokePermission",
+      "AdminEnquiryListInvokePermission",
+      "AdminEnquiryReadInvokePermission",
+      "AdminEnquiryReviewInvokePermission",
+      "AdminEnquirySummaryInvokePermission",
     ]);
     for (const permission of permissions) {
       expect(permission.body).toContain("Action: lambda:InvokeFunction");
@@ -130,6 +134,10 @@ describe("admin API default protection", () => {
     const sources = permissions.map((permission) => permission.body).join("\n");
     expect(sources).toContain("${AdminHttpApi}/authorizers/*");
     expect(sources).toContain("${AdminHttpApi}/$default/GET/health");
+    expect(sources).toContain("${AdminHttpApi}/$default/GET/enquiries");
+    expect(sources).toContain("${AdminHttpApi}/$default/GET/enquiries/summary");
+    expect(sources).toContain("${AdminHttpApi}/$default/GET/enquiries/*");
+    expect(sources).toContain("${AdminHttpApi}/$default/PATCH/enquiries/*");
     expect(template).not.toMatch(/RoleName:.*contact/);
     expect(template).not.toContain("occasionfun-cloudformation-production");
     const roles = template.split("Type: AWS::IAM::Role").slice(1);

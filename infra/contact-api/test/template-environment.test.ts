@@ -79,7 +79,7 @@ describe("contact API environments", () => {
       template.indexOf("  ContactHttpApi:"),
     );
     expect(retryRule).not.toMatch(/Type:\s*AWS::Lambda::Permission/);
-    expect(template.match(/Type:\s*AWS::Lambda::Permission/g)).toHaveLength(2);
+    expect(template.match(/Type:\s*AWS::Lambda::Permission/g)).toHaveLength(6);
     expect(template).not.toMatch(/Type:\s*Schedule\b/);
     expect(template).not.toContain("GHXjmJNlS8ce");
     expect(template).toContain("ScheduleExpression: rate(5 minutes)");
@@ -134,8 +134,11 @@ describe("contact API environments", () => {
   });
 
   it("points both functions at the table created by the same stack", () => {
-    expect(template.match(/LEADS_TABLE_NAME: !Ref LeadsTable/g)).toHaveLength(2);
-    expect(template.match(/!GetAtt LeadsTable\.Arn/g)).toHaveLength(2);
+    expect(template.match(/LEADS_TABLE_NAME: !Ref LeadsTable/g)).toHaveLength(3);
+    expect(template.match(/!GetAtt LeadsTable\.Arn/g)).toHaveLength(3);
+    const production = renderContactTemplate(template, "prod");
+    expect(production.match(/LEADS_TABLE_NAME: !Ref LeadsTable/g)).toHaveLength(2);
+    expect(production.match(/!GetAtt LeadsTable\.Arn/g)).toHaveLength(2);
     expect(template).toContain("${LeadsTable.Arn}/index/notification-due");
     expect(template).not.toMatch(/arn:aws:dynamodb:/);
     expect(template).toContain(`TableName: ${demoNames.table}`);
@@ -284,6 +287,10 @@ describe("contact API environments", () => {
       "AdminAuthorizerFunction",
       "AdminAuthorizerInvokePermission",
       "AdminApiInvokePermission",
+      "AdminEnquiryListInvokePermission",
+      "AdminEnquirySummaryInvokePermission",
+      "AdminEnquiryReadInvokePermission",
+      "AdminEnquiryReviewInvokePermission",
       "AdminApiFunction",
       "AdminHttpApi",
     ];
@@ -302,11 +309,24 @@ describe("contact API environments", () => {
     expect(resources).toContain("Handler: handler.api");
     expect(resources).toContain("Timeout: 5");
     expect(resources).toContain("Timeout: 15");
-    expect(resources).toContain("Runtime: nodejs24.x");
+    expect(resources.match(/Runtime: nodejs22\.x/g)).toEqual(["Runtime: nodejs22.x"]);
+    expect(resources).toMatch(
+      /FunctionName: occasionfun-co-uk-demo-admin-authorizer[\s\S]*?Runtime: nodejs22\.x/,
+    );
+    expect(resources).toMatch(
+      /FunctionName: occasionfun-co-uk-demo-admin-api[\s\S]*?Runtime: nodejs24\.x/,
+    );
+    expect(template).toContain("Runtime: nodejs24.x");
     expect(resources).toContain("arm64");
     expect(resources).not.toContain("secretsmanager");
-    expect(resources).not.toContain("dynamodb:");
-    expect(resources).not.toContain("LeadsTable");
+    expect(resources).toContain("dynamodb:Query");
+    expect(resources).toContain("dynamodb:GetItem");
+    expect(resources).toContain("dynamodb:UpdateItem");
+    expect(resources).toContain("LEADS_TABLE_NAME: !Ref LeadsTable");
+    expect(resources).not.toContain("dynamodb:Scan");
+    expect(resources).not.toContain("dynamodb:PutItem");
+    expect(resources).not.toContain("dynamodb:DeleteItem");
+    expect(resources).not.toContain("AWS::DynamoDB::Table");
     expect(resources).not.toContain("SmtpSecretArn");
     const production = renderContactTemplate(template, "prod");
     expect(production.match(/Type: AWS::Serverless::HttpApi/g)).toHaveLength(1);
@@ -316,6 +336,7 @@ describe("contact API environments", () => {
     expect(production).not.toContain("DeployAdminIdentity");
     expect(production).not.toContain("DeployAdminApi");
     expect(production).not.toContain("admin-dist/");
+    expect(production).not.toContain("nodejs22.x");
     expect(production).not.toContain("SourceAccount");
     expect(production).not.toContain("DeletionProtection");
     expect(production).not.toContain("DeletionPolicy");

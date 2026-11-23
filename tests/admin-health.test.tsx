@@ -23,6 +23,18 @@ const currentAccessToken = vi.hoisted(() =>
   vi.fn(async () => ({ status: "token" as const, token: "access-token" })),
 );
 const fetchAdminHealth = vi.hoisted(() => vi.fn());
+const fetchEnquirySummary = vi.hoisted(() =>
+  vi.fn(async () => ({
+    status: "ok" as const,
+    total: 0,
+    byNotificationStatus: { pending: 0, sending: 0, sent: 0, failed: 0 },
+  })),
+);
+const fetchEnquiries = vi.hoisted(() =>
+  vi.fn(async () => ({ status: "ok" as const, items: [] as [], cursor: null })),
+);
+const fetchEnquiry = vi.hoisted(() => vi.fn());
+const updateEnquiryReview = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace, push: vi.fn() }),
@@ -37,7 +49,12 @@ vi.mock("../src/lib/admin/auth", () => ({
 
 vi.mock("../src/lib/admin/api", () => ({
   isAdminApiConfigured: () => true,
+  notificationStatuses: ["pending", "sending", "sent", "failed"],
   fetchAdminHealth,
+  fetchEnquirySummary,
+  fetchEnquiries,
+  fetchEnquiry,
+  updateEnquiryReview,
 }));
 
 afterEach(() => {
@@ -55,10 +72,27 @@ describe("admin health gate", () => {
     });
     render(<AdminGate />);
 
-    expect(await screen.findByText("The administration service is available.")).toBeVisible();
-    expect(screen.getByText("Status: ok")).toBeVisible();
+    expect(await screen.findByText("Status: ok")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
+    expect(screen.getByText("Admin Panel")).toBeVisible();
+    expect(screen.queryByText("The administration service is available.")).toBeNull();
+    expect(screen.getAllByText("Not connected").length).toBeGreaterThan(0);
     expect(fetchAdminHealth).toHaveBeenCalledWith("access-token");
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("opens an empty enquiry list with no fabricated records", async () => {
+    fetchAdminHealth.mockResolvedValue({
+      status: "ok",
+      body: { ok: true, status: "ok", service: "admin", requestId: "req-1" },
+    });
+    render(<AdminGate />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Enquiries" }));
+
+    expect(screen.getByRole("heading", { name: "Enquiries" })).toBeVisible();
+    expect(await screen.findByText("No enquiries in this notification status.")).toBeVisible();
+    expect(screen.queryByText(/@/)).toBeNull();
   });
 
   it("clears an invalid session after HTTP 401", async () => {
@@ -102,6 +136,7 @@ describe("admin health gate", () => {
     expect(screen.getByText(UNAUTHORISED_ADMIN_EXPLANATION)).toBeVisible();
     expect(fetchAdminHealth).toHaveBeenCalledWith("access-token");
     expect(screen.queryByText("The administration service is available.")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Overview" })).toBeNull();
     expect(logOut).not.toHaveBeenCalled();
   });
 

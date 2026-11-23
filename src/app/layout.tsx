@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import { CookieBanner } from "@/components/cookies/CookieBanner";
-import { Footer } from "@/components/layout/Footer";
-import { Header } from "@/components/layout/Header";
+import { SiteChrome } from "@/components/layout/SiteChrome";
 import { OrganisationJsonLd } from "@/components/seo/OrganisationJsonLd";
 import { company } from "@/config/company";
 import { createPageMetadata } from "@/lib/seo";
@@ -50,11 +49,7 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
-        <Header />
-        <main id="main-content" className="flex-1">
-          {children}
-        </main>
-        <Footer />
+        <SiteChrome>{children}</SiteChrome>
         <CookieBanner />
       </body>
     </html>

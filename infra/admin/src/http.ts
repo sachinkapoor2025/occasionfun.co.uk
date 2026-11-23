@@ -4,10 +4,15 @@ export type HttpResult = {
   body: string;
 };
 
-export function jsonResult(
-  statusCode: number,
-  body: Record<string, string | boolean>,
-): HttpResult {
+type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | Json[]
+  | { [key: string]: Json };
+
+export function jsonResult(statusCode: number, body: Json): HttpResult {
   return {
     statusCode,
     headers: {

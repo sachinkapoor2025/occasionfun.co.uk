@@ -26,7 +26,7 @@ describe("demo admin identity template", () => {
     expect(template).toContain('IsDemo: !Equals [!Ref Environment, "demo"]');
     expect(template).toContain("Default: none");
     expect(adminResources.match(/Condition: DeployAdminIdentity/g)).toHaveLength(3);
-    expect(adminResources.match(/Condition: DeployAdminApi/g)).toHaveLength(9);
+    expect(adminResources.match(/Condition: DeployAdminApi/g)).toHaveLength(13);
     expect(template).toContain("UserPoolName: occasionfun-co-uk-demo-users");
     expect(template).toContain("UserPoolTier: ESSENTIALS");
     expect(template).toContain("ClientName: occasionfun-co-uk-demo-admin-web");
@@ -82,7 +82,14 @@ describe("demo admin identity template", () => {
     expect(adminResources).not.toContain("occasionfun-co-uk-contact");
     expect(adminResources).not.toContain("occasionfun-co-uk-prod");
     expect(adminResources).not.toContain("secretsmanager");
-    expect(adminResources).not.toContain("dynamodb:");
+    expect(adminResources).toContain("dynamodb:Query");
+    expect(adminResources).toContain("dynamodb:GetItem");
+    expect(adminResources).toContain("dynamodb:UpdateItem");
+    expect(adminResources).toContain("index/notification-due");
+    expect(adminResources).toContain("LEADS_TABLE_NAME: !Ref LeadsTable");
+    expect(adminResources).not.toContain("dynamodb:Scan");
+    expect(adminResources).not.toContain("dynamodb:PutItem");
+    expect(adminResources).not.toContain("dynamodb:DeleteItem");
     expect(adminResources).not.toContain("AWS::DynamoDB::Table");
     expect(adminResources).not.toContain("AdminAddUserToGroup");
     expect(adminResources).not.toContain("occasionfun.co.uk");
@@ -96,7 +103,13 @@ describe("demo admin identity template", () => {
   it("protects the health route with the demo Lambda authoriser", () => {
     expect(adminResources).toContain("FunctionName: occasionfun-co-uk-demo-admin-authorizer");
     expect(adminResources).toContain("FunctionName: occasionfun-co-uk-demo-admin-api");
-    expect(adminResources).toContain("Runtime: nodejs24.x");
+    expect(adminResources.match(/Runtime: nodejs22\.x/g)).toEqual(["Runtime: nodejs22.x"]);
+    expect(adminResources).toMatch(
+      /FunctionName: occasionfun-co-uk-demo-admin-authorizer[\s\S]*?Runtime: nodejs22\.x/,
+    );
+    expect(adminResources).toMatch(
+      /FunctionName: occasionfun-co-uk-demo-admin-api[\s\S]*?Runtime: nodejs24\.x/,
+    );
     expect(adminResources).toContain("arm64");
     expect(adminResources).toContain("payloadFormatVersion: \"2.0\"");
     expect(adminResources).toContain("authorizerPayloadFormatVersion: \"2.0\"");
