@@ -15,6 +15,7 @@ import {
   type NotificationStatus,
   type ReviewStatus,
   type StoredEnquiry,
+  deliveryFields,
   isEnquiryId,
   notificationStatus,
 } from "./enquiries";
@@ -208,6 +209,7 @@ function readEnquiry(item: Record<string, unknown> | undefined): StoredEnquiry |
     message: item.message,
     notificationStatus: status,
     ...(typeof item.reviewStatus === "string" ? { reviewStatus: item.reviewStatus } : {}),
+    ...deliveryFields(item),
   };
 }
 

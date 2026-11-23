@@ -38,7 +38,7 @@ export const adminSections: readonly AdminSection[] = [
   {
     id: "notifications",
     label: "Email Notifications",
-    summary: "Enquiry notification delivery.",
+    summary: "Delivery results for enquiry notification emails. Recipients stay on the contact service.",
   },
   {
     id: "marketing",

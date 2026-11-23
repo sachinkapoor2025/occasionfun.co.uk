@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { fetchEnquirySummary, type EnquirySummary } from "@/lib/admin/api";
 import { currentAccessToken } from "@/lib/admin/auth";
 import { EnquiryBoard } from "./EnquiryBoard";
+import { NotificationBoard } from "./NotificationBoard";
 import { adminSections, overviewCounts, type AdminSectionId } from "./modules";
 
 export type PanelHealth = "loading" | "ok" | "unavailable" | "unconfigured";
@@ -143,7 +144,7 @@ function SectionBody({
   if (id === "visitors") return <Visitors />;
   if (id === "enquiries") return <Enquiries health={health} onUnauthorised={onUnauthorised} />;
   if (id === "conversations") return <Conversations />;
-  if (id === "notifications") return <Notifications />;
+  if (id === "notifications") return <Notifications health={health} onUnauthorised={onUnauthorised} />;
   if (id === "marketing") return <Marketing />;
   if (id === "knowledge") return <Knowledge />;
   return <Access />;
@@ -275,19 +276,21 @@ function Conversations() {
   );
 }
 
-function Notifications() {
-  return (
-    <div className="space-y-4">
+function Notifications({
+  health,
+  onUnauthorised,
+}: {
+  health: PanelHealth;
+  onUnauthorised?: () => void;
+}) {
+  if (health !== "ok" || !onUnauthorised) {
+    return (
       <NotConnected>
-        Notification recipients are deployment settings on the contact service. This panel cannot read or change them.
+        Enquiry notification results are stored with each contact form lead. This panel can read them when the administration API is available.
       </NotConnected>
-      <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
-        <li>The contact service saves the enquiry, then sends one notification email.</li>
-        <li>The sender, recipients, and subject prefix are set on that service, not in this panel.</li>
-        <li>A saved enquiry is pending, sending, sent, or failed. A failed send is retried by the contact service.</li>
-      </ul>
-    </div>
-  );
+    );
+  }
+  return <NotificationBoard onUnauthorised={onUnauthorised} />;
 }
 
 function Marketing() {

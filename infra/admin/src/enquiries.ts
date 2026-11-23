@@ -16,6 +16,9 @@ export type StoredEnquiry = {
   message: string;
   notificationStatus: NotificationStatus;
   reviewStatus?: string;
+  notificationAttempts?: number;
+  lastNotificationError?: string;
+  notifiedAt?: string;
 };
 
 export type Enquiry = {
@@ -30,6 +33,9 @@ export type Enquiry = {
   messageTruncated: boolean;
   notificationStatus: NotificationStatus;
   reviewStatus: ReviewStatus;
+  notificationAttempts?: number;
+  lastNotificationError?: string;
+  notifiedAt?: string;
 };
 
 export type EnquiryQuery = {
@@ -54,6 +60,8 @@ export interface EnquiryStore {
 
 const ID = /^[a-f0-9]{64}$/;
 const SEARCH = /^[A-Za-z0-9 .@_'+\-]{1,80}$/;
+const ERROR_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const PREVIEW = 160;
 
 export function isEnquiryId(value: string): boolean {
@@ -101,6 +109,21 @@ export function encodeCursor(
   ).toString("base64url");
 }
 
+export function deliveryFields(source: {
+  notificationAttempts?: unknown;
+  lastNotificationError?: unknown;
+  notifiedAt?: unknown;
+}): Pick<Enquiry, "notificationAttempts" | "lastNotificationError" | "notifiedAt"> {
+  const attempts = notificationAttempts(source.notificationAttempts);
+  const error = notificationError(source.lastNotificationError);
+  const sentAt = notificationTime(source.notifiedAt);
+  return {
+    ...(attempts === undefined ? {} : { notificationAttempts: attempts }),
+    ...(error === undefined ? {} : { lastNotificationError: error }),
+    ...(sentAt === undefined ? {} : { notifiedAt: sentAt }),
+  };
+}
+
 export function toEnquiry(item: StoredEnquiry, preview: boolean): Enquiry {
   const message = preview ? item.message.slice(0, PREVIEW) : item.message;
   return {
@@ -115,11 +138,27 @@ export function toEnquiry(item: StoredEnquiry, preview: boolean): Enquiry {
     messageTruncated: preview && item.message.length > PREVIEW,
     notificationStatus: item.notificationStatus,
     reviewStatus: normalReview(item.reviewStatus),
+    ...deliveryFields(item),
   };
 }
 
 export function normalReview(value: string | undefined): ReviewStatus {
   return value === "reviewed" || value === "closed" ? value : "new";
+}
+
+function notificationAttempts(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 99) return undefined;
+  return value;
+}
+
+function notificationError(value: unknown): string | undefined {
+  if (typeof value !== "string" || !ERROR_NAME.test(value)) return undefined;
+  return value;
+}
+
+function notificationTime(value: unknown): string | undefined {
+  if (typeof value !== "string" || !TIMESTAMP.test(value)) return undefined;
+  return value;
 }
 
 function parseLimit(value: string | undefined): number {

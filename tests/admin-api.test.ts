@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchAdminHealth, fetchEnquiries, updateEnquiryReview } from "../src/lib/admin/api";
+import { fetchAdminHealth, fetchEnquiries, fetchEnquiry, updateEnquiryReview } from "../src/lib/admin/api";
 
 const BASE = "https://0yjlr5feea.execute-api.eu-west-2.amazonaws.com";
 
@@ -141,5 +141,61 @@ describe("enquiry client", () => {
     expect(init.method).toBe("PATCH");
     expect(init.body).toBe(JSON.stringify({ reviewStatus: "reviewed" }));
     expect(url.href).not.toContain("access-token");
+  });
+
+  it("reads delivery fields and ignores a sending lock or secret", async () => {
+    process.env.NEXT_PUBLIC_ADMIN_API_BASE = BASE;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ok: true,
+          enquiry: {
+            ...enquiry,
+            notificationStatus: "sent",
+            notificationAttempts: 2,
+            lastNotificationError: "SmtpTimeout",
+            notifiedAt: "2026-11-23T09:05:00.000Z",
+            sendingOwner: "lock-token",
+            password: "secret-value",
+          },
+          requestId: "req-1",
+        }),
+      ),
+    );
+
+    const result = await fetchEnquiry("access-token", enquiry.id);
+    expect(result).toMatchObject({
+      status: "ok",
+      enquiry: {
+        notificationAttempts: 2,
+        lastNotificationError: "SmtpTimeout",
+        notifiedAt: "2026-11-23T09:05:00.000Z",
+      },
+    });
+    expect(result.status === "ok" && result.enquiry).not.toHaveProperty("sendingOwner");
+    expect(result.status === "ok" && result.enquiry).not.toHaveProperty("password");
+  });
+
+  it("keeps an enquiry when optional delivery fields are absent or unsafe", async () => {
+    process.env.NEXT_PUBLIC_ADMIN_API_BASE = BASE;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ok: true,
+          items: [{ ...enquiry, lastNotificationError: "password=hidden", notificationAttempts: 1.2 }],
+          cursor: null,
+          requestId: "req-1",
+        }),
+      ),
+    );
+
+    const result = await fetchEnquiries("access-token", { status: "pending" });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.items[0]?.name).toBe("Ada Lovelace");
+    expect(result.items[0]).not.toHaveProperty("lastNotificationError");
+    expect(result.items[0]).not.toHaveProperty("notificationAttempts");
   });
 });

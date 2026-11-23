@@ -81,6 +81,9 @@ export type Enquiry = {
   messageTruncated: boolean;
   notificationStatus: NotificationStatus;
   reviewStatus: ReviewStatus;
+  notificationAttempts?: number;
+  lastNotificationError?: string;
+  notifiedAt?: string;
 };
 
 export type EnquirySummary =
@@ -263,5 +266,24 @@ function readEnquiry(value: unknown): Enquiry | null {
     messageTruncated: record.messageTruncated,
     notificationStatus: record.notificationStatus as NotificationStatus,
     reviewStatus: record.reviewStatus as ReviewStatus,
+    ...deliveryFields(record),
+  };
+}
+
+const ERROR_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+
+function deliveryFields(
+  record: Record<string, unknown>,
+): Pick<Enquiry, "notificationAttempts" | "lastNotificationError" | "notifiedAt"> {
+  const attempts = record.notificationAttempts;
+  const error = record.lastNotificationError;
+  const sentAt = record.notifiedAt;
+  return {
+    ...(typeof attempts === "number" && Number.isInteger(attempts) && attempts >= 0 && attempts <= 99
+      ? { notificationAttempts: attempts }
+      : {}),
+    ...(typeof error === "string" && ERROR_NAME.test(error) ? { lastNotificationError: error } : {}),
+    ...(typeof sentAt === "string" && TIMESTAMP.test(sentAt) ? { notifiedAt: sentAt } : {}),
   };
 }

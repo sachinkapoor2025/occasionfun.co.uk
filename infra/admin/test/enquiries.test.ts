@@ -151,6 +151,93 @@ describe("enquiry routes", () => {
     expect(body.enquiry.messageTruncated).toBe(false);
     expect(body.enquiry.reviewStatus).toBe("reviewed");
     expect(body.enquiry.message).toContain("The full text stays on the detail view.");
+    expect(body.enquiry).not.toHaveProperty("notificationAttempts");
+    expect(body.enquiry).not.toHaveProperty("lastNotificationError");
+    expect(body.enquiry).not.toHaveProperty("notifiedAt");
+    expect(body.enquiry).not.toHaveProperty("sendingOwner");
+  });
+
+  it("returns stored delivery fields without the sending lock", async () => {
+    configured();
+    const result = await api(
+      adminEvent("GET /enquiries/{idempotencyKey}", { pathParameters: { idempotencyKey: ID } }),
+      {
+        count: async () => 0,
+        list: async () => ({ items: [] }),
+        get: async () =>
+          lead({
+            notificationStatus: "failed",
+            notificationAttempts: 6,
+            lastNotificationError: "RetryLimitReached",
+            notifiedAt: "2026-11-23T09:05:00.000Z",
+          }),
+        setReview: async () => null,
+      },
+    );
+    const enquiry = JSON.parse(result.body).enquiry;
+    expect(result.statusCode).toBe(200);
+    expect(enquiry.notificationAttempts).toBe(6);
+    expect(enquiry.lastNotificationError).toBe("RetryLimitReached");
+    expect(enquiry.notifiedAt).toBe("2026-11-23T09:05:00.000Z");
+    expect(enquiry.notificationStatus).toBe("failed");
+    expect(enquiry).not.toHaveProperty("sendingOwner");
+    expect(JSON.stringify(enquiry)).not.toMatch(/password|secret|smtp/i);
+  });
+
+  it("omits unsafe delivery values from the response", async () => {
+    configured();
+    const result = await api(
+      adminEvent("GET /enquiries", { queryStringParameters: { status: "pending" } }),
+      {
+        count: async () => 0,
+        list: async () => ({
+          items: [
+            lead({
+              notificationAttempts: -1,
+              lastNotificationError: "password=hidden",
+              notifiedAt: "yesterday",
+            }),
+          ],
+        }),
+        get: async () => null,
+        setReview: async () => null,
+      },
+    );
+    const enquiry = JSON.parse(result.body).items[0];
+    expect(enquiry.name).toBe("Ada Lovelace");
+    expect(enquiry).not.toHaveProperty("notificationAttempts");
+    expect(enquiry).not.toHaveProperty("lastNotificationError");
+    expect(enquiry).not.toHaveProperty("notifiedAt");
+    expect(JSON.stringify(enquiry)).not.toContain("password");
+  });
+
+  it("rejects a non-admin detail request before reading the enquiry", async () => {
+    configured();
+    const result = await api(
+      {
+        routeKey: "GET /enquiries/{idempotencyKey}",
+        pathParameters: { idempotencyKey: ID },
+        requestContext: {
+          requestId: "req-detail",
+          authorizer: { lambda: { hasAdmin: "false" } },
+        },
+      },
+      {
+        count: async () => {
+          throw new Error("store was called");
+        },
+        list: async () => {
+          throw new Error("store was called");
+        },
+        get: async () => {
+          throw new Error("store was called");
+        },
+        setReview: async () => {
+          throw new Error("store was called");
+        },
+      },
+    );
+    expect(result.statusCode).toBe(403);
   });
 
   it("reports a missing enquiry", async () => {
@@ -261,21 +348,48 @@ describe("enquiry DynamoDB access", () => {
     expect(updated?.notificationStatus).toBe("pending");
   });
 
-  it("drops internal mail fields from a read", async () => {
+  it("keeps delivery facts and drops the sending lock and secrets", async () => {
     const store = enquiryStore("occasionfun-co-uk-leads", {
       query: async () => ({}),
       get: async () => ({
         Item: {
           ...(lead() as unknown as Record<string, unknown>),
           sendingOwner: "lock-token",
-          lastNotificationError: "smtp failed",
+          password: "secret-value",
+          notificationAttempts: 3,
+          lastNotificationError: "SmtpTimeout",
+          notifiedAt: "2026-11-23T09:05:00.000Z",
         },
       }),
       update: async () => ({ Attributes: undefined }),
     });
     const found = await store.get(ID);
+    expect(found?.notificationAttempts).toBe(3);
+    expect(found?.lastNotificationError).toBe("SmtpTimeout");
+    expect(found?.notifiedAt).toBe("2026-11-23T09:05:00.000Z");
     expect(found).not.toHaveProperty("sendingOwner");
+    expect(found).not.toHaveProperty("password");
+    expect(JSON.stringify(found)).not.toContain("lock-token");
+    expect(JSON.stringify(found)).not.toContain("secret-value");
+  });
+
+  it("omits missing or unsafe delivery fields", async () => {
+    const store = enquiryStore("occasionfun-co-uk-leads", {
+      query: async () => ({}),
+      get: async () => ({
+        Item: {
+          ...(lead() as unknown as Record<string, unknown>),
+          notificationAttempts: 1.5,
+          lastNotificationError: "password=hidden",
+          notifiedAt: "not-a-time",
+        },
+      }),
+      update: async () => ({ Attributes: undefined }),
+    });
+    const found = await store.get(ID);
+    expect(found).not.toHaveProperty("notificationAttempts");
     expect(found).not.toHaveProperty("lastNotificationError");
-    expect(JSON.stringify(found)).not.toContain("smtp");
+    expect(found).not.toHaveProperty("notifiedAt");
+    expect(JSON.stringify(found)).not.toContain("password");
   });
 });
