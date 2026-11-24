@@ -45,6 +45,7 @@ jobs:
             package-lock.json
             infra/contact-api/package-lock.json
             infra/admin/package-lock.json
+            infra/analytics/package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci
@@ -54,6 +55,9 @@ jobs:
 
       - name: Install admin API dependencies
         run: npm ci --prefix infra/admin
+
+      - name: Install analytics ingestion dependencies
+        run: npm ci --prefix infra/analytics
 
       - name: Lint
         run: npm run lint
@@ -78,6 +82,9 @@ jobs:
 
       - name: Test admin API
         run: npm test --prefix infra/admin
+
+      - name: Typecheck analytics ingestion
+        run: npm run typecheck --prefix infra/analytics
 
       - name: Install SAM CLI
         uses: aws-actions/setup-sam@f84ec7d548307efafe33230528756de3c5841a17 # v2
