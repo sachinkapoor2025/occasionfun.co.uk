@@ -100,6 +100,12 @@ jobs:
       - name: Stage the admin bundle beside the contact bundle
         run: node scripts/stage-admin-bundle.mjs
 
+      - name: Build analytics ingestion bundle
+        run: npm run build --prefix infra/analytics
+
+      - name: Stage the analytics bundle beside the contact bundle
+        run: node scripts/stage-analytics-bundle.mjs
+
       - name: SAM validate
         working-directory: infra/contact-api
         run: sam validate --lint --template template.yaml
@@ -208,6 +214,7 @@ jobs:
             package-lock.json
             infra/contact-api/package-lock.json
             infra/admin/package-lock.json
+            infra/analytics/package-lock.json
 
       - name: Disable Amplify auto-build on the demo branch
         env:
@@ -231,6 +238,12 @@ jobs:
       - name: Build admin API bundle
         run: npm run build --prefix infra/admin
 
+      - name: Install analytics ingestion dependencies
+        run: npm ci --prefix infra/analytics
+
+      - name: Build analytics ingestion bundle
+        run: npm run build --prefix infra/analytics
+
       - name: Install SAM CLI
         uses: aws-actions/setup-sam@f84ec7d548307efafe33230528756de3c5841a17 # v2
         with:
@@ -245,6 +258,9 @@ jobs:
       - name: Stage the admin bundle beside the contact bundle
         run: node scripts/stage-admin-bundle.mjs
 
+      - name: Stage the analytics bundle beside the contact bundle
+        run: node scripts/stage-analytics-bundle.mjs
+
       - name: SAM build
         working-directory: infra/contact-api
         run: sam build --template template.demo.yaml
@@ -256,6 +272,8 @@ jobs:
           test -f .aws-sam/build/template.yaml
           test -f dist/handler.js
           test -f admin-dist/handler.js
+          test -f analytics-dist/handler.js
+          test -f .aws-sam/build/AnalyticsIngestFunction/handler.js
           if cmp -s dist/handler.js admin-dist/handler.js; then
             echo "Contact and admin Lambda bundles are the same file."
             exit 1
