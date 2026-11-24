@@ -6,7 +6,6 @@ import { renderContactTemplate } from "../../../scripts/render-contact-template.
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const template = readFileSync(path.join(packageRoot, "template.yaml"), "utf8");
-const productionFile = readFileSync(path.join(packageRoot, "template.production.yaml"), "utf8");
 
 function region(begin: string, end: string): string {
   const start = template.indexOf(`  # ${begin}`);
@@ -151,7 +150,6 @@ describe("demo analytics infrastructure", () => {
       "/analytics/collect",
     ]) {
       expect(production).not.toContain(name);
-      expect(productionFile).not.toContain(name);
     }
     expect(production).toContain("TableName: occasionfun-co-uk-prod-leads");
     expect(production).toContain("FunctionName: occasionfun-co-uk-prod-contact");
