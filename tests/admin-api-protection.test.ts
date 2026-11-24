@@ -84,6 +84,17 @@ export function unprotectedRoutes(source: string): string[] {
   return problems;
 }
 
+const ADMIN_INVOKE_PERMISSIONS = [
+  "AdminApiInvokePermission",
+  "AdminAuthorizerInvokePermission",
+  "AdminEnquiryListInvokePermission",
+  "AdminEnquiryReadInvokePermission",
+  "AdminEnquiryReviewInvokePermission",
+  "AdminEnquirySummaryInvokePermission",
+];
+
+const ANALYTICS_COLLECT_PERMISSION = "AnalyticsIngestFunctionPostCollectPermission";
+
 function invokePermissions(source: string): { name: string; body: string }[] {
   const blocks = source.replace(/\r\n/g, "\n").split(/\n {2}(?=[A-Z])/);
   return blocks
@@ -92,6 +103,17 @@ function invokePermissions(source: string): { name: string; body: string }[] {
       name: block.slice(0, block.indexOf(":")),
       body: block,
     }));
+}
+
+function isAdminApiPermission(permission: { body: string }): boolean {
+  const invokesAdminFunction =
+    permission.body.includes("FunctionName: !Ref AdminApiFunction") ||
+    permission.body.includes("FunctionName: !Ref AdminAuthorizerFunction");
+  return (
+    permission.body.includes("Condition: DeployAdminApi") &&
+    invokesAdminFunction &&
+    permission.body.includes("${AdminHttpApi}")
+  );
 }
 
 describe("admin API default protection", () => {
@@ -114,15 +136,17 @@ describe("admin API default protection", () => {
 
   it("allows only this API Gateway API to invoke the admin Lambdas", () => {
     const permissions = invokePermissions(template);
-    expect(permissions.map((permission) => permission.name).sort()).toEqual([
-      "AdminApiInvokePermission",
-      "AdminAuthorizerInvokePermission",
-      "AdminEnquiryListInvokePermission",
-      "AdminEnquiryReadInvokePermission",
-      "AdminEnquiryReviewInvokePermission",
-      "AdminEnquirySummaryInvokePermission",
-    ]);
-    for (const permission of permissions) {
+    const adminPermissions = permissions.filter(isAdminApiPermission);
+    expect(adminPermissions.map((permission) => permission.name).sort()).toEqual([
+      ...ADMIN_INVOKE_PERMISSIONS,
+    ].sort());
+    expect(
+      permissions.filter(
+        (permission) =>
+          !isAdminApiPermission(permission) && permission.name !== ANALYTICS_COLLECT_PERMISSION,
+      ),
+    ).toEqual([]);
+    for (const permission of adminPermissions) {
       expect(permission.body).toContain("Action: lambda:InvokeFunction");
       expect(permission.body).toContain("Principal: apigateway.amazonaws.com");
       expect(permission.body).toContain("SourceAccount: !Ref AWS::AccountId");
@@ -130,8 +154,8 @@ describe("admin API default protection", () => {
       expect(permission.body).not.toContain("/*/");
       expect(permission.body).not.toMatch(/Principal:\s*"\*"/);
     }
-    expect(permissions[0].body).not.toBe(permissions[1].body);
-    const sources = permissions.map((permission) => permission.body).join("\n");
+    expect(adminPermissions[0].body).not.toBe(adminPermissions[1].body);
+    const sources = adminPermissions.map((permission) => permission.body).join("\n");
     expect(sources).toContain("${AdminHttpApi}/authorizers/*");
     expect(sources).toContain("${AdminHttpApi}/$default/GET/health");
     expect(sources).toContain("${AdminHttpApi}/$default/GET/enquiries");
@@ -144,5 +168,28 @@ describe("admin API default protection", () => {
     for (const role of roles) {
       expect(role.slice(0, role.indexOf("Type: AWS::"))).not.toContain("lambda:InvokeFunction");
     }
+  });
+
+  it("allows only the analytics API POST /analytics/collect route to invoke the ingestion Lambda", () => {
+    const analyticsPermissions = invokePermissions(template).filter(
+      (permission) => permission.name === ANALYTICS_COLLECT_PERMISSION,
+    );
+    expect(analyticsPermissions).toHaveLength(1);
+    const body = analyticsPermissions[0].body;
+    expect(body).toContain("Condition: DeployAnalytics");
+    expect(body).not.toContain("Condition: DeployAdminApi");
+    expect(body).toContain("Action: lambda:InvokeFunction");
+    expect(body).toContain("FunctionName: !Ref AnalyticsIngestFunction");
+    expect(body).toContain("Principal: apigateway.amazonaws.com");
+    expect(body).toContain(
+      "SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AnalyticsHttpApi}/$default/POST/analytics/collect",
+    );
+    expect(body.match(/SourceArn:/g)).toHaveLength(1);
+    expect(body).not.toContain("${AdminHttpApi}");
+    expect(body).not.toContain("${ContactHttpApi}");
+    expect(body).not.toContain("AdminApiFunction");
+    expect(body).not.toContain("AdminAuthorizerFunction");
+    expect(body).not.toContain("/*/");
+    expect(body).not.toMatch(/Principal:\s*"\*"/);
   });
 });
