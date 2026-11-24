@@ -22,6 +22,8 @@ node_modules/
 /build
 /dist
 infra/contact-api/admin-dist/
+infra/contact-api/analytics-dist/
+infra/analytics/dist/
 .aws-sam/
 
 # misc

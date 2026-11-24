@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   ADMIN_UPDATE_ADDITIONS,
+  ANALYTICS_UPDATE_ADDITIONS,
   findUnsafeChanges,
   inspectChangeSet,
   inspectChangeSetFile,
@@ -344,6 +345,15 @@ describe("change set safety", () => {
       },
     }));
     expect(findUnsafeChanges(additions, { mode: "update" })).toEqual([]);
+    expect(ANALYTICS_UPDATE_ADDITIONS).toContain("VisitorsTable");
+    expect(ANALYTICS_UPDATE_ADDITIONS).toContain("PageViewsTable");
+    expect(ANALYTICS_UPDATE_ADDITIONS).not.toContain("LeadsTable");
+    expect(new Set(ANALYTICS_UPDATE_ADDITIONS).size).toBe(ANALYTICS_UPDATE_ADDITIONS.length);
+    for (const id of ANALYTICS_UPDATE_ADDITIONS) {
+      expect(id).not.toMatch(/[*?]/);
+      expect(PROTECTED_LOGICAL_IDS).not.toContain(id);
+      expect(ADMIN_UPDATE_ADDITIONS).not.toContain(id);
+    }
     expect(
       findUnsafeChanges(
         [
@@ -399,6 +409,46 @@ describe("change set safety", () => {
       expect(removed[0]?.reasons).toContain("deletion");
       expect(replaced[0]?.reasons).toContain("replacement");
     }
+  });
+
+  it("accepts analytics additions only for an enabled demo deployment", () => {
+    const additions = ANALYTICS_UPDATE_ADDITIONS.map((logicalId) => ({
+      ResourceChange: {
+        Action: "Add",
+        LogicalResourceId: logicalId,
+        Replacement: "False",
+      },
+    }));
+    const unapproved = [
+      ...additions,
+      {
+        ResourceChange: {
+          Action: "Add",
+          LogicalResourceId: "AnalyticsExtraTable",
+          Replacement: "False",
+        },
+      },
+    ];
+    expect(findUnsafeChanges(additions, {
+      mode: "update",
+      environment: "demo",
+      analyticsDeployment: "disabled",
+    })).not.toEqual([]);
+    expect(findUnsafeChanges(additions, {
+      mode: "update",
+      environment: "demo",
+      analyticsDeployment: "enabled",
+    })).toEqual([]);
+    expect(findUnsafeChanges(unapproved, {
+      mode: "update",
+      environment: "demo",
+      analyticsDeployment: "enabled",
+    }).some((finding) => finding.logicalId === "AnalyticsExtraTable")).toBe(true);
+    expect(findUnsafeChanges(additions, {
+      mode: "update",
+      environment: "prod",
+      analyticsDeployment: "enabled",
+    })).not.toEqual([]);
   });
 
   it("fails closed for a missing file, invalid JSON, a missing Changes array, and an empty array", () => {

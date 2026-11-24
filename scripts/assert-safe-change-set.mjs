@@ -30,17 +30,45 @@ export const ADMIN_UPDATE_ADDITIONS = [
   "AdminHttpApiApiGatewayDefaultStage",
 ];
 
+/**
+ * Exact logical IDs a demo update may add only when AnalyticsDeployment is enabled.
+ * Production updates never add them. The list has no wildcards.
+ * AnalyticsHttpApiApiGatewayDefaultStage is emitted by SAM for StageName $default.
+ */
+export const ANALYTICS_UPDATE_ADDITIONS = [
+  "VisitorsTable",
+  "PageViewsTable",
+  "AnalyticsIngestLogGroup",
+  "AnalyticsIngestRole",
+  "AnalyticsIngestFunction",
+  "AnalyticsIngestFunctionPostCollectPermission",
+  "AnalyticsHttpApi",
+  "AnalyticsHttpApiApiGatewayDefaultStage",
+];
+
 const adminAdditions = new Set(ADMIN_UPDATE_ADDITIONS);
+const analyticsAdditions = new Set(ANALYTICS_UPDATE_ADDITIONS);
+
+function analyticsAdditionsAllowed(environment, analyticsDeployment) {
+  return environment === "demo" && analyticsDeployment === "enabled";
+}
 
 /**
  * An update of an existing stack may modify resources in place.
- * It may add only ADMIN_UPDATE_ADDITIONS. It may not remove or replace anything.
+ * It may add only ADMIN_UPDATE_ADDITIONS.
+ * Analytics IDs are additional only when environment is demo and
+ * analyticsDeployment is enabled. Both values must be passed explicitly.
+ * It may not remove or replace anything.
  * Protected logical ids: LeadsTable, ContactFunction, ContactRetryFunction,
  * ContactHttpApi, ContactLogGroup, ContactRetryLogGroup.
  * A create change set may add resources and still may not remove or replace them.
  * SAM's "No changes to deploy" message never reaches this checker.
  */
-export function findUnsafeChanges(changes, { mode }) {
+export function findUnsafeChanges(changes, { mode, environment = "", analyticsDeployment = "disabled" }) {
+  const allowedAdditions = new Set(adminAdditions);
+  if (analyticsAdditionsAllowed(environment, analyticsDeployment)) {
+    for (const logicalId of analyticsAdditions) allowedAdditions.add(logicalId);
+  }
   const findings = [];
   for (const change of changes ?? []) {
     const resource = change?.ResourceChange ?? {};
@@ -55,7 +83,7 @@ export function findUnsafeChanges(changes, { mode }) {
     if (mode === "update" && action === "Add") {
       if (protectedIds.has(logicalId)) {
         reasons.push("protected resource would be created again");
-      } else if (!adminAdditions.has(logicalId)) {
+      } else if (!allowedAdditions.has(logicalId)) {
         reasons.push("unexpected resource addition");
       }
     }
@@ -72,7 +100,7 @@ export function findUnsafeChanges(changes, { mode }) {
   return findings;
 }
 
-export function inspectChangeSet(payload, mode) {
+export function inspectChangeSet(payload, mode, options = {}) {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
     return {
       ok: false,
@@ -88,7 +116,11 @@ export function inspectChangeSet(payload, mode) {
       error: "Change set has no resource changes. Refusing to execute an empty change set.",
     };
   }
-  const findings = findUnsafeChanges(payload.Changes, { mode });
+  const findings = findUnsafeChanges(payload.Changes, {
+    mode,
+    environment: options.environment,
+    analyticsDeployment: options.analyticsDeployment,
+  });
   if (findings.length > 0) {
     return {
       ok: false,
@@ -99,7 +131,7 @@ export function inspectChangeSet(payload, mode) {
   return { ok: true, findings: [], count: payload.Changes.length };
 }
 
-export function inspectChangeSetFile(file, mode) {
+export function inspectChangeSetFile(file, mode, options = {}) {
   let text;
   try {
     text = readFileSync(file, "utf8");
@@ -115,7 +147,17 @@ export function inspectChangeSetFile(file, mode) {
   } catch {
     throw new Error("Change set file is not valid JSON.");
   }
-  return inspectChangeSet(payload, mode);
+  return inspectChangeSet(payload, mode, options);
+}
+
+function readOptionalArgument(argv, flag) {
+  const index = argv.indexOf(flag);
+  if (index === -1) return undefined;
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`Pass a value after ${flag}.`);
+  }
+  return value;
 }
 
 function printFindings(findings) {
@@ -148,7 +190,10 @@ function readFileArgument(argv) {
 const invokedDirectly = process.argv[1]?.endsWith("assert-safe-change-set.mjs");
 if (invokedDirectly) {
   try {
-    const result = inspectChangeSetFile(readFileArgument(process.argv), readMode(process.argv));
+    const result = inspectChangeSetFile(readFileArgument(process.argv), readMode(process.argv), {
+      environment: readOptionalArgument(process.argv, "--environment"),
+      analyticsDeployment: readOptionalArgument(process.argv, "--analytics-deployment"),
+    });
     if (!result.ok) {
       if (result.findings?.length) printFindings(result.findings);
       else console.error(result.error);

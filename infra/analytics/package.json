@@ -1,0 +1,22 @@
+{
+  "name": "occasionfun-co-uk-analytics",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo-only public ingestion for OccasionFun first-party page views. Not enabled by default.",
+  "scripts": {
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/handler.js --external:@aws-sdk/* --alias:@=../../src",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.906.0",
+    "@aws-sdk/lib-dynamodb": "^3.906.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "esbuild": "^0.28.0",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.0"
+  }
+}

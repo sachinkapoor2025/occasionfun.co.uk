@@ -57,6 +57,18 @@ Parameters:
       inactive. api sets deletion protection active and creates the
       protected admin API. Do not pass this parameter to production.
   # END DEMO ADMIN PARAMETERS
+  # BEGIN DEMO ANALYTICS PARAMETERS
+  AnalyticsDeployment:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - disabled
+      - enabled
+    Description: >
+      Demo contact stack only. disabled creates no analytics tables, function,
+      or API. enabled creates them. Production rendering removes this parameter,
+      so it cannot turn analytics on in production.
+  # END DEMO ANALYTICS PARAMETERS
 
 Conditions:
   IsProduction: !Equals [!Ref Environment, "prod"]
@@ -73,6 +85,11 @@ Conditions:
     - !Condition IsDemo
     - !Condition IsAdminApiPhase
   # END DEMO ADMIN CONDITIONS
+  # BEGIN DEMO ANALYTICS CONDITIONS
+  DeployAnalytics: !And
+    - !Condition IsDemo
+    - !Equals [!Ref AnalyticsDeployment, "enabled"]
+  # END DEMO ANALYTICS CONDITIONS
 
 Globals:
   Function:
@@ -578,6 +595,220 @@ Resources:
         DetailedMetricsEnabled: true
   # END DEMO ADMIN RESOURCES
 
+  # BEGIN DEMO ANALYTICS RESOURCES
+  # Created only when Environment is demo and AnalyticsDeployment is enabled.
+  VisitorsTable:
+    Type: AWS::DynamoDB::Table
+    Condition: DeployAnalytics
+    Properties:
+      TableName: occasionfun-co-uk-demo-visitors
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: visitorId
+          AttributeType: S
+        - AttributeName: itemKey
+          AttributeType: S
+        - AttributeName: day
+          AttributeType: S
+      KeySchema:
+        - AttributeName: visitorId
+          KeyType: HASH
+        - AttributeName: itemKey
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: by-activity-day
+          KeySchema:
+            - AttributeName: day
+              KeyType: HASH
+            - AttributeName: visitorId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - itemKey
+              - expiresAt
+              - firstSeenDay
+              - newVisitor
+              - source
+              - landingPath
+              - lastEventAt
+              - dayFirstAt
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  PageViewsTable:
+    Type: AWS::DynamoDB::Table
+    Condition: DeployAnalytics
+    Properties:
+      TableName: occasionfun-co-uk-demo-page-views
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: visitorId
+          AttributeType: S
+        - AttributeName: eventSort
+          AttributeType: S
+        - AttributeName: eventDay
+          AttributeType: S
+      KeySchema:
+        - AttributeName: visitorId
+          KeyType: HASH
+        - AttributeName: eventSort
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: by-event-day
+          KeySchema:
+            - AttributeName: eventDay
+              KeyType: HASH
+            - AttributeName: eventSort
+              KeyType: RANGE
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - expiresAt
+              - eventId
+              - sessionId
+              - pagePath
+              - source
+              - referrerHost
+              - utmSource
+              - utmMedium
+              - utmCampaign
+              - utmTerm
+              - utmContent
+              - deviceCategory
+              - browserCategory
+              - occurredAt
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  AnalyticsIngestLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: DeployAnalytics
+    Properties:
+      LogGroupName: /aws/lambda/occasionfun-co-uk-demo-analytics-ingest
+      RetentionInDays: 30
+
+  AnalyticsIngestRole:
+    Type: AWS::IAM::Role
+    Condition: DeployAnalytics
+    Properties:
+      RoleName: occasionfun-co-uk-demo-analytics-ingest
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: own-log-group
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${AnalyticsIngestLogGroup.Arn}:*"
+        - PolicyName: analytics-ingest
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource:
+                  - !GetAtt VisitorsTable.Arn
+                  - !GetAtt PageViewsTable.Arn
+              # Day-item correction queries the visitor partition. It does not query an index.
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                Resource: !GetAtt VisitorsTable.Arn
+
+  AnalyticsIngestFunction:
+    Type: AWS::Serverless::Function
+    Condition: DeployAnalytics
+    DependsOn: AnalyticsIngestLogGroup
+    Properties:
+      FunctionName: occasionfun-co-uk-demo-analytics-ingest
+      Role: !GetAtt AnalyticsIngestRole.Arn
+      Handler: handler.handler
+      Runtime: nodejs24.x
+      Architectures:
+        - arm64
+      MemorySize: 256
+      CodeUri: analytics-dist/
+      Timeout: 10
+      Description: Public demo ingestion for first-party page views. No leads access.
+      Environment:
+        Variables:
+          VISITORS_TABLE_NAME: !Ref VisitorsTable
+          PAGE_VIEWS_TABLE_NAME: !Ref PageViewsTable
+
+  # The route is declared on the API, not as a function event. A conditional
+  # function event makes SAM nest Fn::If on the same condition, which fails lint.
+  AnalyticsIngestFunctionPostCollectPermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployAnalytics
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AnalyticsIngestFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AnalyticsHttpApi}/$default/POST/analytics/collect
+
+  AnalyticsHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Condition: DeployAnalytics
+    Properties:
+      StageName: $default
+      FailOnWarnings: true
+      CorsConfiguration:
+        AllowOrigins:
+          - https://occasionfun.co.uk
+          - https://www.occasionfun.co.uk
+          - https://demo.d2oib89bmco9su.amplifyapp.com
+          - https://d2oib89bmco9su.amplifyapp.com
+        AllowHeaders:
+          - content-type
+        AllowMethods:
+          - POST
+          - OPTIONS
+        MaxAge: 600
+      DefinitionBody:
+        openapi: "3.0.1"
+        info:
+          title: OccasionFun demo analytics ingestion
+          version: "1.0"
+        paths:
+          /analytics/collect:
+            post:
+              x-amazon-apigateway-integration:
+                payloadFormatVersion: "2.0"
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AnalyticsIngestFunction.Arn}/invocations
+                timeoutInMillis: 10000
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
+        DetailedMetricsEnabled: true
+  # END DEMO ANALYTICS RESOURCES
+
 Outputs:
   ContactEndpoint:
     Description: Set as NEXT_PUBLIC_CONTACT_ENDPOINT, then rebuild the static site.
@@ -603,3 +834,9 @@ Outputs:
     Condition: DeployAdminApi
     Value: /health
   # END DEMO ADMIN OUTPUTS
+  # BEGIN DEMO ANALYTICS OUTPUTS
+  AnalyticsCollectUrl:
+    Condition: DeployAnalytics
+    Description: Demo ingestion URL. The browser collector is not wired to this output.
+    Value: !Sub https://${AnalyticsHttpApi}.execute-api.${AWS::Region}.amazonaws.com/analytics/collect
+  # END DEMO ANALYTICS OUTPUTS

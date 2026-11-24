@@ -149,6 +149,26 @@ function stripDemoAdmin(template) {
     "END DEMO ADMIN RESOURCES",
   );
   rendered = removeMarkedRegion(rendered, "BEGIN DEMO ADMIN OUTPUTS", "END DEMO ADMIN OUTPUTS");
+  rendered = removeMarkedRegion(
+    rendered,
+    "BEGIN DEMO ANALYTICS PARAMETERS",
+    "END DEMO ANALYTICS PARAMETERS",
+  );
+  rendered = removeMarkedRegion(
+    rendered,
+    "BEGIN DEMO ANALYTICS CONDITIONS",
+    "END DEMO ANALYTICS CONDITIONS",
+  );
+  rendered = removeMarkedRegion(
+    rendered,
+    "BEGIN DEMO ANALYTICS RESOURCES",
+    "END DEMO ANALYTICS RESOURCES",
+  );
+  rendered = removeMarkedRegion(
+    rendered,
+    "BEGIN DEMO ANALYTICS OUTPUTS",
+    "END DEMO ANALYTICS OUTPUTS",
+  );
   for (const leftover of [
     "IsDemo",
     "AdminDeploymentPhase",
@@ -165,6 +185,17 @@ function stripDemoAdmin(template) {
     "DeletionProtection",
     "DeletionPolicy",
     "UpdateReplacePolicy",
+    "AnalyticsDeployment",
+    "DeployAnalytics",
+    "VisitorsTable",
+    "PageViewsTable",
+    "AnalyticsIngest",
+    "AnalyticsHttpApi",
+    "occasionfun-co-uk-demo-visitors",
+    "occasionfun-co-uk-demo-page-views",
+    "VISITORS_TABLE_NAME",
+    "PAGE_VIEWS_TABLE_NAME",
+    "/analytics/collect",
   ]) {
     if (rendered.includes(leftover)) {
       throw new Error(`Production template still contains ${leftover}.`);

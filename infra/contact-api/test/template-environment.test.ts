@@ -79,7 +79,7 @@ describe("contact API environments", () => {
       template.indexOf("  ContactHttpApi:"),
     );
     expect(retryRule).not.toMatch(/Type:\s*AWS::Lambda::Permission/);
-    expect(template.match(/Type:\s*AWS::Lambda::Permission/g)).toHaveLength(6);
+    expect(template.match(/Type:\s*AWS::Lambda::Permission/g)).toHaveLength(7);
     expect(template).not.toMatch(/Type:\s*Schedule\b/);
     expect(template).not.toContain("GHXjmJNlS8ce");
     expect(template).toContain("ScheduleExpression: rate(5 minutes)");
@@ -178,7 +178,7 @@ describe("contact API environments", () => {
 
   it("creates the API Gateway and retry schedule inside the stack", () => {
     expect(template).not.toContain("0e6zpkvbkj");
-    expect(template.match(/Type: AWS::Serverless::HttpApi/g)).toHaveLength(2);
+    expect(template.match(/Type: AWS::Serverless::HttpApi/g)).toHaveLength(3);
     expect(template).toContain("ApiId: !Ref ContactHttpApi");
     expect(template).not.toMatch(/Type:\s*Schedule\b/);
     expect(template).toContain("ScheduleExpression: rate(5 minutes)");
