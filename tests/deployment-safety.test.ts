@@ -1418,3 +1418,51 @@ describe("CloudFormation execution role", () => {
     expect(explicit.stdout).toContain("No change set was created.");
   });
 });
+
+describe("deploy script stable stack statuses", () => {
+  const deployScript = readFileSync(path.join(root, "scripts/deploy-contact-stack.sh"), "utf8");
+  const statusCase = deployScript.match(
+    /case "\$stack_status" in\r?\n\s+(CREATE_COMPLETE\|UPDATE_COMPLETE\|UPDATE_ROLLBACK_COMPLETE\|IMPORT_COMPLETE)\)\r?\n\s+require_names\r?\n\s+require_endpoint\r?\n\s+change_mode="update"\r?\n\s+;;\r?\n\s+\*\)\r?\n\s+echo "Stack \$\{STACK_NAME\} is \$\{stack_status:-unavailable\}\. Refusing to create a change set\."\r?\n\s+exit 1/,
+  );
+
+  function decision(status: string): "update" | "refuse" {
+    expect(statusCase).not.toBeNull();
+    const accepted = statusCase?.[1].split("|") ?? [];
+    return accepted.includes(status) ? "update" : "refuse";
+  }
+
+  it("accepts a completed import and the existing stable statuses", () => {
+    expect(decision("IMPORT_COMPLETE")).toBe("update");
+    expect(decision("CREATE_COMPLETE")).toBe("update");
+    expect(decision("UPDATE_COMPLETE")).toBe("update");
+    expect(decision("UPDATE_ROLLBACK_COMPLETE")).toBe("update");
+  });
+
+  it("rejects in-progress, rollback, and unexpected statuses", () => {
+    for (const status of [
+      "UPDATE_IN_PROGRESS",
+      "UPDATE_ROLLBACK_IN_PROGRESS",
+      "ROLLBACK_IN_PROGRESS",
+      "IMPORT_IN_PROGRESS",
+      "IMPORT_ROLLBACK_IN_PROGRESS",
+      "IMPORT_ROLLBACK_COMPLETE",
+      "UPDATE_FAILED",
+      "DELETE_IN_PROGRESS",
+      "",
+    ]) {
+      expect(decision(status)).toBe("refuse");
+    }
+  });
+
+  it("fails safely when the stack is missing or its existence is unknown", () => {
+    expect(deployScript).toContain('if [ "$ALLOW_CREATE" != "true" ]; then');
+    expect(deployScript).toContain('echo "Stack ${STACK_NAME} does not exist. Refusing to create it."');
+    expect(deployScript).toContain("exit 1");
+    expect(deployScript).toContain(
+      'echo "Could not determine whether stack ${STACK_NAME} exists. No change set was created."',
+    );
+    expect(deployScript.indexOf('change_mode="update"')).toBeLessThan(
+      deployScript.indexOf('change_mode="create"'),
+    );
+  });
+});

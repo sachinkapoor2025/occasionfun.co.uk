@@ -208,7 +208,7 @@ fi
 case "$classification" in
   exists)
     case "$stack_status" in
-      CREATE_COMPLETE|UPDATE_COMPLETE|UPDATE_ROLLBACK_COMPLETE)
+      CREATE_COMPLETE|UPDATE_COMPLETE|UPDATE_ROLLBACK_COMPLETE|IMPORT_COMPLETE)
         require_names
         require_endpoint
         change_mode="update"
