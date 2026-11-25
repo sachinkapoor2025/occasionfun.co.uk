@@ -41,6 +41,8 @@ describe("demo analytics infrastructure", () => {
     expect(enabled).toContain("Default: enabled");
     const visitors = block(resources, "VisitorsTable");
     const pages = block(resources, "PageViewsTable");
+    expect(visitors).toContain("DeletionPolicy: Retain");
+    expect(visitors).toContain("UpdateReplacePolicy: Retain");
     expect(visitors).toContain("TableName: occasionfun-co-uk-demo-visitors");
     expect(visitors).toContain("BillingMode: PAY_PER_REQUEST");
     expect(visitors).toContain("AttributeName: visitorId");
@@ -65,6 +67,8 @@ describe("demo analytics infrastructure", () => {
     expect(visitors).toContain("AttributeName: expiresAt");
     expect(visitors).toContain("Enabled: true");
 
+    expect(pages).toContain("DeletionPolicy: Retain");
+    expect(pages).toContain("UpdateReplacePolicy: Retain");
     expect(pages).toContain("TableName: occasionfun-co-uk-demo-page-views");
     expect(pages).toContain("BillingMode: PAY_PER_REQUEST");
     expect(pages).toContain("AttributeName: eventSort");

@@ -600,6 +600,8 @@ Resources:
   VisitorsTable:
     Type: AWS::DynamoDB::Table
     Condition: DeployAnalytics
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: occasionfun-co-uk-demo-visitors
       BillingMode: PAY_PER_REQUEST
@@ -645,6 +647,8 @@ Resources:
   PageViewsTable:
     Type: AWS::DynamoDB::Table
     Condition: DeployAnalytics
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: occasionfun-co-uk-demo-page-views
       BillingMode: PAY_PER_REQUEST
