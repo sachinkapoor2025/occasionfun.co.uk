@@ -324,7 +324,27 @@ while [ -n "$token" ]; do
   token="$(printf '%s' "$page" | jq -r '.NextToken // empty')"
 done
 
-if ! run_node "$ROOT/scripts/assert-safe-change-set.mjs" --mode "$change_mode" --file "$changes"; then
+checker_args=(
+  --mode "$change_mode"
+  --file "$changes"
+)
+if [ "$ENVIRONMENT" = "demo" ]; then
+  analytics_deployment="$(sed -n 's/^AnalyticsDeployment:[[:space:]]*//p' "$PARAMETERS_FILE" | head -n 1 | tr -d '\r"')"
+  analytics_deployment="${analytics_deployment#"${analytics_deployment%%[![:space:]]*}"}"
+  analytics_deployment="${analytics_deployment%"${analytics_deployment##*[![:space:]]}"}"
+  if [ -z "$analytics_deployment" ]; then
+    analytics_deployment="disabled"
+  fi
+  case "$analytics_deployment" in
+    enabled|disabled) ;;
+    *)
+      echo "AnalyticsDeployment must be enabled or disabled."
+      exit 1
+      ;;
+  esac
+  checker_args+=(--environment demo --analytics-deployment "$analytics_deployment")
+fi
+if ! run_node "$ROOT/scripts/assert-safe-change-set.mjs" "${checker_args[@]}"; then
   echo "Deleting the unexecuted change set."
   aws cloudformation delete-change-set --change-set-name "$arn" --region "$AWS_REGION" || true
   exit 1

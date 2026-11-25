@@ -81,6 +81,13 @@ export function assertDeployConfig(input) {
   if (input.environment === "prod" && adminPhase) {
     errors.push("Production parameters must not select an admin deployment phase.");
   }
+  const analyticsDeployment = input.parameters.AnalyticsDeployment;
+  if (input.environment === "demo" && analyticsDeployment !== "enabled") {
+    errors.push("Demo deployments must set AnalyticsDeployment to enabled.");
+  }
+  if (input.environment === "prod" && analyticsDeployment) {
+    errors.push("Production parameters must not set AnalyticsDeployment.");
+  }
   if (input.environment === "demo") {
     if (input.expectedApiId !== DEMO.apiId) errors.push("Demo API id must stay 0e6zpkvbkj.");
     if (input.expectedEndpoint !== DEMO.endpoint) {

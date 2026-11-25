@@ -70,12 +70,15 @@ function baseInput(environment: "demo" | "prod") {
       Environment: target.environment,
       SmtpSecretArn: SMTP_SECRET_ARN,
       AllowedOrigins: originsValue(target.origins),
-      ...(environment === "demo" ? { AdminDeploymentPhase: "api" } : {}),
+      ...(environment === "demo"
+        ? { AdminDeploymentPhase: "api", AnalyticsDeployment: "enabled" }
+        : {}),
     } as {
       Environment: string;
       SmtpSecretArn: string;
       AllowedOrigins: string;
       AdminDeploymentPhase?: string;
+      AnalyticsDeployment?: string;
     },
   };
 }
@@ -131,6 +134,21 @@ describe("deployment configuration", () => {
       );
     }
     expect(assertDeployConfig(baseInput("prod"))).toEqual([]);
+    const omittedAnalytics = baseInput("demo");
+    delete omittedAnalytics.parameters.AnalyticsDeployment;
+    expect(assertDeployConfig(omittedAnalytics).join(" ")).toMatch(
+      /Demo deployments must set AnalyticsDeployment to enabled/,
+    );
+    const disabledAnalytics = baseInput("demo");
+    disabledAnalytics.parameters.AnalyticsDeployment = "disabled";
+    expect(assertDeployConfig(disabledAnalytics).join(" ")).toMatch(
+      /Demo deployments must set AnalyticsDeployment to enabled/,
+    );
+    const productionAnalytics = baseInput("prod");
+    productionAnalytics.parameters.AnalyticsDeployment = "enabled";
+    expect(assertDeployConfig(productionAnalytics).join(" ")).toMatch(
+      /must not set AnalyticsDeployment/,
+    );
     for (const phase of ["none", "identity", "api", "both"]) {
       const production = baseInput("prod");
       production.parameters.AdminDeploymentPhase = phase;
@@ -589,7 +607,9 @@ describe("GitHub Actions workflows", () => {
     expect(demo).toContain(DEMO.endpoint);
     expect(demo).toContain(originsValue(DEMO.origins));
     expect(demo).toContain("AdminDeploymentPhase: api");
+    expect(demo).toContain("AnalyticsDeployment: enabled");
     expect(demo).not.toContain("AdminDeploymentPhase: none");
+    expect(production).not.toContain("AnalyticsDeployment");
     expect(demo).not.toContain("--no-execute");
     expect(demo).toContain(SMTP_SECRET_ARN);
     expect(demo).toContain("aws-region: eu-west-2");
@@ -1121,6 +1141,7 @@ describe("deployment script configuration check", () => {
         `SmtpSecretArn: ${SMTP_SECRET_ARN}`,
         `AllowedOrigins: "${originsValue(DEMO.origins)}"`,
         "AdminDeploymentPhase: api",
+        "AnalyticsDeployment: enabled",
         "",
       ].join("\n"),
     );
@@ -1188,7 +1209,7 @@ function runConfigCheck(
       `Environment: ${target.environment}`,
       `SmtpSecretArn: ${SMTP_SECRET_ARN}`,
       `AllowedOrigins: "${originsValue(target.origins)}"`,
-      ...(environment === "demo" ? ["AdminDeploymentPhase: api"] : []),
+      ...(environment === "demo" ? ["AdminDeploymentPhase: api", "AnalyticsDeployment: enabled"] : []),
       "",
     ].join("\n"),
   );
