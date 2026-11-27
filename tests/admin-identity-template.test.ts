@@ -26,7 +26,35 @@ describe("demo admin identity template", () => {
     expect(template).toContain('IsDemo: !Equals [!Ref Environment, "demo"]');
     expect(template).toContain("Default: none");
     expect(adminResources.match(/Condition: DeployAdminIdentity/g)).toHaveLength(3);
-    expect(adminResources.match(/Condition: DeployAdminApi/g)).toHaveLength(13);
+    const demoAdminApiResources = [
+      "AdminAuthorizerLogGroup",
+      "AdminApiLogGroup",
+      "AdminAuthorizerRole",
+      "AdminApiRole",
+      "AdminAuthorizerFunction",
+      "AdminAuthorizerInvokePermission",
+      "AdminApiInvokePermission",
+      "AdminEnquiryListInvokePermission",
+      "AdminEnquirySummaryInvokePermission",
+      "AdminEnquiryReadInvokePermission",
+      "AdminEnquiryReviewInvokePermission",
+      "AdminApiFunction",
+      "AdminHttpApi",
+    ];
+    const aggregateReportResources = [
+      "AnalyticsReportLogGroup",
+      "AnalyticsReportRole",
+      "AnalyticsReportFunction",
+      "AnalyticsReportFunctionGetSummaryPermission",
+    ];
+    expect(adminResources.match(/Condition: DeployAdminApi/g)).toHaveLength(
+      demoAdminApiResources.length + aggregateReportResources.length,
+    );
+    for (const logicalId of [...demoAdminApiResources, ...aggregateReportResources]) {
+      expect(adminResources, logicalId).toMatch(
+        new RegExp(`^  ${logicalId}:\\r?\\n    Type: .+\\r?\\n    Condition: DeployAdminApi`, "m"),
+      );
+    }
     expect(template).toContain("UserPoolName: occasionfun-co-uk-demo-users");
     expect(template).toContain("UserPoolTier: ESSENTIALS");
     expect(template).toContain("ClientName: occasionfun-co-uk-demo-admin-web");
