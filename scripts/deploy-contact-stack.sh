@@ -237,6 +237,9 @@ if [ ! -f "$template" ]; then
   echo "SAM build output is missing. Run sam build before deployment."
   exit 1
 fi
+if [ "$ENVIRONMENT" = "demo" ]; then
+  run_node "$ROOT/scripts/assert-demo-analytics-template.mjs" --template "$template"
+fi
 
 log="$(mktemp)"
 sam_args=(

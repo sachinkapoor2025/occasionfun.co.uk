@@ -498,6 +498,73 @@ Resources:
           COGNITO_CLIENT_ID: !Ref AdminUserPoolClient
           LEADS_TABLE_NAME: !Ref LeadsTable
 
+  AnalyticsReportLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: DeployAdminApi
+    Properties:
+      LogGroupName: /aws/lambda/occasionfun-co-uk-demo-analytics-report
+      RetentionInDays: 30
+
+  AnalyticsReportRole:
+    Type: AWS::IAM::Role
+    Condition: DeployAdminApi
+    Properties:
+      RoleName: occasionfun-co-uk-demo-analytics-report
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: own-log-group
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${AnalyticsReportLogGroup.Arn}:*"
+        - PolicyName: traffic-stats-read
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/occasionfun-co-uk-demo-traffic-stats
+
+  AnalyticsReportFunction:
+    Type: AWS::Serverless::Function
+    Condition: DeployAdminApi
+    DependsOn: AnalyticsReportLogGroup
+    Properties:
+      FunctionName: occasionfun-co-uk-demo-analytics-report
+      Role: !GetAtt AnalyticsReportRole.Arn
+      Handler: report.handler
+      Runtime: nodejs24.x
+      Architectures:
+        - arm64
+      MemorySize: 256
+      CodeUri: analytics-report-dist/
+      Timeout: 15
+      Description: Read-only aggregate statistics for the demo admin API. No visitor identifiers.
+      Environment:
+        Variables:
+          TRAFFIC_STATS_TABLE_NAME: occasionfun-co-uk-demo-traffic-stats
+
+  AnalyticsReportFunctionGetSummaryPermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployAdminApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AnalyticsReportFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminHttpApi}/$default/GET/analytics/summary
+
   AdminHttpApi:
     Type: AWS::Serverless::HttpApi
     Condition: DeployAdminApi
@@ -537,6 +604,16 @@ Resources:
                 type: aws_proxy
                 httpMethod: POST
                 uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AdminApiFunction.Arn}/invocations
+                timeoutInMillis: 15000
+          /analytics/summary:
+            get:
+              security:
+                - AdminAccessTokenAuthorizer: []
+              x-amazon-apigateway-integration:
+                payloadFormatVersion: "2.0"
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AnalyticsReportFunction.Arn}/invocations
                 timeoutInMillis: 15000
           /enquiries:
             get:
@@ -756,7 +833,9 @@ Resources:
       Architectures:
         - arm64
       MemorySize: 256
-      CodeUri: analytics-dist/
+      # The deployed collector artifact. SAM build skips an s3:// CodeUri, and
+      # sam package returns that URL unchanged instead of uploading analytics-dist/.
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-pjopzssdwf27/demo/087bcd8fc88fe771071d57216dbbe448
       Timeout: 10
       Description: Public demo ingestion for first-party page views. No leads access.
       Environment:
@@ -774,6 +853,102 @@ Resources:
       FunctionName: !Ref AnalyticsIngestFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AnalyticsHttpApi}/$default/POST/analytics/collect
+
+  TrafficStatsTable:
+    Type: AWS::DynamoDB::Table
+    Condition: DeployAnalytics
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: occasionfun-co-uk-demo-traffic-stats
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: statDay
+          AttributeType: S
+        - AttributeName: statKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: statDay
+          KeyType: HASH
+        - AttributeName: statKey
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  AnalyticsMeasureLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: DeployAnalytics
+    Properties:
+      LogGroupName: /aws/lambda/occasionfun-co-uk-demo-analytics-measure
+      RetentionInDays: 30
+
+  AnalyticsMeasureRole:
+    Type: AWS::IAM::Role
+    Condition: DeployAnalytics
+    Properties:
+      RoleName: occasionfun-co-uk-demo-analytics-measure
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: own-log-group
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${AnalyticsMeasureLogGroup.Arn}:*"
+        - PolicyName: traffic-stats
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt TrafficStatsTable.Arn
+
+  AnalyticsMeasureFunction:
+    Type: AWS::Serverless::Function
+    Condition: DeployAnalytics
+    DependsOn: AnalyticsMeasureLogGroup
+    Properties:
+      FunctionName: occasionfun-co-uk-demo-analytics-measure
+      Role: !GetAtt AnalyticsMeasureRole.Arn
+      Handler: measure.handler
+      Runtime: nodejs24.x
+      Architectures:
+        - arm64
+      MemorySize: 256
+      CodeUri: analytics-measure-dist/
+      Timeout: 10
+      Description: Demo aggregate page counters. No visitor identifiers. Writes stay off until privacy review.
+      Environment:
+        Variables:
+          TRAFFIC_STATS_TABLE_NAME: !Ref TrafficStatsTable
+          # Writes stay off until the privacy notice and statistical-purpose review are approved.
+          AGGREGATE_MEASUREMENT_ENABLED: "false"
+          GEOLITE2_COUNTRY_DB: ""
+
+  AnalyticsMeasureFunctionPostMeasurePermission:
+    Type: AWS::Lambda::Permission
+    Condition: DeployAnalytics
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AnalyticsMeasureFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AnalyticsHttpApi}/$default/POST/analytics/measure
 
   AnalyticsHttpApi:
     Type: AWS::Serverless::HttpApi
@@ -806,6 +981,14 @@ Resources:
                 type: aws_proxy
                 httpMethod: POST
                 uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AnalyticsIngestFunction.Arn}/invocations
+                timeoutInMillis: 10000
+          /analytics/measure:
+            post:
+              x-amazon-apigateway-integration:
+                payloadFormatVersion: "2.0"
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AnalyticsMeasureFunction.Arn}/invocations
                 timeoutInMillis: 10000
       DefaultRouteSettings:
         ThrottlingBurstLimit: 10

@@ -94,6 +94,8 @@ const ADMIN_INVOKE_PERMISSIONS = [
 ];
 
 const ANALYTICS_COLLECT_PERMISSION = "AnalyticsIngestFunctionPostCollectPermission";
+const ANALYTICS_MEASURE_PERMISSION = "AnalyticsMeasureFunctionPostMeasurePermission";
+const ANALYTICS_REPORT_PERMISSION = "AnalyticsReportFunctionGetSummaryPermission";
 
 function invokePermissions(source: string): { name: string; body: string }[] {
   const blocks = source.replace(/\r\n/g, "\n").split(/\n {2}(?=[A-Z])/);
@@ -143,7 +145,10 @@ describe("admin API default protection", () => {
     expect(
       permissions.filter(
         (permission) =>
-          !isAdminApiPermission(permission) && permission.name !== ANALYTICS_COLLECT_PERMISSION,
+          !isAdminApiPermission(permission) &&
+          permission.name !== ANALYTICS_COLLECT_PERMISSION &&
+          permission.name !== ANALYTICS_MEASURE_PERMISSION &&
+          permission.name !== ANALYTICS_REPORT_PERMISSION,
       ),
     ).toEqual([]);
     for (const permission of adminPermissions) {
@@ -191,5 +196,42 @@ describe("admin API default protection", () => {
     expect(body).not.toContain("AdminAuthorizerFunction");
     expect(body).not.toContain("/*/");
     expect(body).not.toMatch(/Principal:\s*"\*"/);
+  });
+
+  it("allows only POST /analytics/measure to invoke the aggregate Lambda", () => {
+    const permissions = invokePermissions(template).filter(
+      (permission) => permission.name === ANALYTICS_MEASURE_PERMISSION,
+    );
+    expect(permissions).toHaveLength(1);
+    const body = permissions[0].body;
+    expect(body).toContain("Condition: DeployAnalytics");
+    expect(body).toContain("FunctionName: !Ref AnalyticsMeasureFunction");
+    expect(body).toContain(
+      "SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AnalyticsHttpApi}/$default/POST/analytics/measure",
+    );
+    expect(body).not.toContain("POST/analytics/collect");
+    expect(body).not.toContain("AnalyticsIngestFunction");
+    expect(body).not.toContain("/*/");
+  });
+
+  it("allows only GET /analytics/summary on the admin API to invoke the report Lambda", () => {
+    const permissions = invokePermissions(template).filter(
+      (permission) => permission.name === ANALYTICS_REPORT_PERMISSION,
+    );
+    expect(permissions).toHaveLength(1);
+    const body = permissions[0].body;
+    expect(body).toContain("Condition: DeployAdminApi");
+    expect(body).toContain("FunctionName: !Ref AnalyticsReportFunction");
+    expect(body).toContain("SourceAccount: !Ref AWS::AccountId");
+    expect(body).toContain(
+      "SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminHttpApi}/$default/GET/analytics/summary",
+    );
+    expect(body.match(/SourceArn:/g)).toHaveLength(1);
+    expect(body).not.toContain("${AnalyticsHttpApi}");
+    expect(body).not.toContain("${ContactHttpApi}");
+    expect(body).not.toContain("AdminApiFunction");
+    expect(body).not.toContain("POST/analytics/measure");
+    expect(body).not.toContain("/*/");
+    expect(unprotectedRoutes(template.replace(/\r\n/g, "\n"))).toEqual([]);
   });
 });

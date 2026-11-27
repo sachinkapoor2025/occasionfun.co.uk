@@ -24,6 +24,7 @@ const ADMIN_INVOKE_PERMISSION_IDS = new Set([
   "AdminEnquirySummaryInvokePermission",
   "AdminEnquiryReadInvokePermission",
   "AdminEnquiryReviewInvokePermission",
+  "AnalyticsReportFunctionGetSummaryPermission",
 ]);
 
 function escapeRegExp(value) {
@@ -196,6 +197,21 @@ function stripDemoAdmin(template) {
     "VISITORS_TABLE_NAME",
     "PAGE_VIEWS_TABLE_NAME",
     "/analytics/collect",
+    "TrafficStatsTable",
+    "AnalyticsMeasure",
+    "occasionfun-co-uk-demo-traffic-stats",
+    "occasionfun-co-uk-demo-analytics-measure",
+    "TRAFFIC_STATS_TABLE_NAME",
+    "AGGREGATE_MEASUREMENT_ENABLED",
+    "GEOLITE2_COUNTRY_DB",
+    "/analytics/measure",
+    "analytics-measure-dist/",
+    "AnalyticsReport",
+    "occasionfun-co-uk-demo-analytics-report",
+    "analytics-report-dist/",
+    "/analytics/summary",
+    "087bcd8fc88fe771071d57216dbbe448",
+    "aws-sam-cli-managed-default-samclisourcebucket-pjopzssdwf27",
   ]) {
     if (rendered.includes(leftover)) {
       throw new Error(`Production template still contains ${leftover}.`);

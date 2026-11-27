@@ -79,7 +79,7 @@ describe("contact API environments", () => {
       template.indexOf("  ContactHttpApi:"),
     );
     expect(retryRule).not.toMatch(/Type:\s*AWS::Lambda::Permission/);
-    expect(template.match(/Type:\s*AWS::Lambda::Permission/g)).toHaveLength(7);
+    expect(template.match(/Type:\s*AWS::Lambda::Permission/g)).toHaveLength(9);
     expect(template).not.toMatch(/Type:\s*Schedule\b/);
     expect(template).not.toContain("GHXjmJNlS8ce");
     expect(template).toContain("ScheduleExpression: rate(5 minutes)");
@@ -293,6 +293,10 @@ describe("contact API environments", () => {
       "AdminEnquiryReviewInvokePermission",
       "AdminApiFunction",
       "AdminHttpApi",
+      "AnalyticsReportLogGroup",
+      "AnalyticsReportRole",
+      "AnalyticsReportFunction",
+      "AnalyticsReportFunctionGetSummaryPermission",
     ];
     const identityIds = ["AdminUserPool", "AdminUserPoolClient", "AdminGroup"];
     const apiIds = adminIds.filter((id) => !identityIds.includes(id));

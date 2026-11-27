@@ -38,12 +38,21 @@ export const ADMIN_UPDATE_ADDITIONS = [
 export const ANALYTICS_UPDATE_ADDITIONS = [
   "VisitorsTable",
   "PageViewsTable",
+  "TrafficStatsTable",
   "AnalyticsIngestLogGroup",
   "AnalyticsIngestRole",
   "AnalyticsIngestFunction",
   "AnalyticsIngestFunctionPostCollectPermission",
+  "AnalyticsMeasureLogGroup",
+  "AnalyticsMeasureRole",
+  "AnalyticsMeasureFunction",
+  "AnalyticsMeasureFunctionPostMeasurePermission",
   "AnalyticsHttpApi",
   "AnalyticsHttpApiApiGatewayDefaultStage",
+  "AnalyticsReportLogGroup",
+  "AnalyticsReportRole",
+  "AnalyticsReportFunction",
+  "AnalyticsReportFunctionGetSummaryPermission",
 ];
 
 const adminAdditions = new Set(ADMIN_UPDATE_ADDITIONS);
@@ -79,6 +88,9 @@ export function findUnsafeChanges(changes, { mode, environment = "", analyticsDe
     if (action === "Remove") reasons.push("deletion");
     if (replacement === "True" || replacement === "Conditional") {
       reasons.push("replacement");
+    }
+    if (logicalId === "AnalyticsIngestFunction" && action === "Modify") {
+      reasons.push("existing analytics collector would be modified");
     }
     if (mode === "update" && action === "Add") {
       if (protectedIds.has(logicalId)) {

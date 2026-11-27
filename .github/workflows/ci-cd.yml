@@ -124,6 +124,12 @@ jobs:
         working-directory: infra/contact-api
         run: sam build --template template.demo.yaml
 
+      - name: Confirm demo analytics resources survive rendering and packaging
+        run: |
+          node scripts/assert-demo-analytics-template.mjs --template infra/contact-api/template.yaml
+          node scripts/assert-demo-analytics-template.mjs --template infra/contact-api/template.demo.yaml
+          node scripts/assert-demo-analytics-template.mjs --template infra/contact-api/.aws-sam/build/template.yaml
+
       - name: SAM validate retained demo permission template
         working-directory: infra/contact-api
         run: sam validate --lint --template demo-retry-permission.yaml
@@ -141,6 +147,9 @@ jobs:
       - name: SAM validate production names
         working-directory: infra/contact-api
         run: sam validate --lint --template template.production.yaml
+
+      - name: Confirm production rendering omits demo analytics
+        run: node scripts/assert-demo-analytics-template.mjs --production-template infra/contact-api/template.production.yaml
 
       - name: Upload rendered demo template
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -273,7 +282,13 @@ jobs:
           test -f dist/handler.js
           test -f admin-dist/handler.js
           test -f analytics-dist/handler.js
-          test -f .aws-sam/build/AnalyticsIngestFunction/handler.js
+          test -f analytics-measure-dist/measure.js
+          test -f .aws-sam/build/AnalyticsMeasureFunction/measure.js
+          grep -F "s3://aws-sam-cli-managed-default-samclisourcebucket-pjopzssdwf27/demo/087bcd8fc88fe771071d57216dbbe448" .aws-sam/build/template.yaml
+          if [ -e .aws-sam/build/AnalyticsIngestFunction ]; then
+            echo "SAM rebuilt the existing analytics collector."
+            exit 1
+          fi
           if cmp -s dist/handler.js admin-dist/handler.js; then
             echo "Contact and admin Lambda bundles are the same file."
             exit 1
@@ -282,6 +297,8 @@ jobs:
             echo "Demo deployment package declares the retained retry permission."
             exit 1
           fi
+          node ../../scripts/assert-demo-analytics-template.mjs --template template.demo.yaml
+          node ../../scripts/assert-demo-analytics-template.mjs --template .aws-sam/build/template.yaml
 
       - name: Write demo parameters
         run: |
