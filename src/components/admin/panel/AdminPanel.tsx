@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { fetchEnquirySummary, type EnquirySummary } from "@/lib/admin/api";
 import { currentAccessToken } from "@/lib/admin/auth";
+import { AggregateBoard } from "./AggregateBoard";
 import { EnquiryBoard } from "./EnquiryBoard";
 import { NotificationBoard } from "./NotificationBoard";
 import { adminSections, overviewCounts, type AdminSectionId } from "./modules";
@@ -142,6 +143,7 @@ function SectionBody({
 }) {
   if (id === "overview") return <Overview health={health} onUnauthorised={onUnauthorised} />;
   if (id === "visitors") return <Visitors />;
+  if (id === "aggregate") return <Aggregate health={health} onUnauthorised={onUnauthorised} />;
   if (id === "enquiries") return <Enquiries health={health} onUnauthorised={onUnauthorised} />;
   if (id === "conversations") return <Conversations />;
   if (id === "notifications") return <Notifications health={health} onUnauthorised={onUnauthorised} />;
@@ -236,6 +238,23 @@ function figureFor(
   if (summary === "loading" || summary === "idle") return "Loading…";
   if (!value) return "Could not be loaded";
   return value;
+}
+
+function Aggregate({
+  health,
+  onUnauthorised,
+}: {
+  health: PanelHealth;
+  onUnauthorised?: () => void;
+}) {
+  if (health !== "ok" || !onUnauthorised) {
+    return (
+      <NotConnected>
+        Aggregate counts can be read when the administration API is available. This section does not list individual visitors.
+      </NotConnected>
+    );
+  }
+  return <AggregateBoard onUnauthorised={onUnauthorised} />;
 }
 
 function Visitors() {

@@ -1,6 +1,7 @@
 export type AdminSectionId =
   | "overview"
   | "visitors"
+  | "aggregate"
   | "enquiries"
   | "conversations"
   | "notifications"
@@ -24,6 +25,11 @@ export const adminSections: readonly AdminSection[] = [
     id: "visitors",
     label: "Visitors & Activity",
     summary: "Visitor records and consent.",
+  },
+  {
+    id: "aggregate",
+    label: "Aggregate Analytics",
+    summary: "Page-view and landing-visit counters. These are not individual visitors.",
   },
   {
     id: "enquiries",
