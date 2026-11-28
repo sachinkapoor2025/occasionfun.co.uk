@@ -65,9 +65,11 @@ type TableRow = Array<string | number>;
 export function AggregateBoard({
   onUnauthorised,
   now = () => new Date(),
+  measurementEnabled = false,
 }: {
   onUnauthorised: () => void;
   now?: () => Date;
+  measurementEnabled?: boolean;
 }) {
   const [clock] = useState(() => now());
   const allowed = reportingWindow(clock);
@@ -159,9 +161,21 @@ export function AggregateBoard({
 
   return (
     <div className="space-y-6">
-      <p className="max-w-3xl text-sm leading-6 text-slate-600">
-        These figures are aggregate counters for page views and landing visits. They are not individual visitors, and they are separate from enquiry records.
-      </p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="font-display text-2xl text-navy-900">Aggregate Analytics</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+            Page-view and landing-visit counters. These are not individual visitors.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-navy-900"
+          onClick={() => setReload((value) => value + 1)}
+        >
+          Refresh
+        </button>
+      </header>
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-navy-900">Reporting period</legend>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -203,10 +217,7 @@ export function AggregateBoard({
         </div>
       ) : null}
       <p className="text-sm leading-6 text-slate-600">
-        Selected period: {choiceLabel}, {applied.start} to {applied.end}, Europe/London. Both dates are inclusive.
-      </p>
-      <p className="text-sm leading-6 text-slate-600">
-        The longest period is the latest 90 London dates, {allowed.start} to {allowed.end}.
+        {choiceLabel}, {applied.start} to {applied.end}, Europe/London.
       </p>
       {rangeError ? <p className="text-sm font-semibold text-navy-900">{RANGE_MESSAGE[rangeError]}</p> : null}
       {state.status === "loading" ? <p className="text-sm text-slate-600">Loading aggregate counts…</p> : null}
@@ -222,7 +233,12 @@ export function AggregateBoard({
         </p>
       ) : null}
       {state.status === "ready" ? (
-        <ReportView report={state.report} pageSize={pageSize} onPageSize={setPageSize} />
+        <ReportView
+          report={state.report}
+          pageSize={pageSize}
+          onPageSize={setPageSize}
+          measurementEnabled={measurementEnabled}
+        />
       ) : null}
       {state.status === "error" ? (
         <button type="button" className="text-sm font-semibold text-accent" onClick={() => setReload((value) => value + 1)}>
@@ -253,10 +269,12 @@ function ReportView({
   report,
   pageSize,
   onPageSize,
+  measurementEnabled,
 }: {
   report: AggregateReport;
   pageSize: PageSize;
   onPageSize: (size: PageSize) => void;
+  measurementEnabled: boolean;
 }) {
   const stored = reportHasStoredCounts(report);
   const countryRows = positiveRows([
@@ -277,20 +295,38 @@ function ReportView({
   const dailyRows = stored ? report.daily.map((day) => [day.date, day.pageViews, day.visits, day.partial ? "Partial" : "Complete"]) : [];
   const tableCount = [dailyRows, countryRows, pathRows, sourceRows, deviceRows, browserRows].filter((rows) => rows.length > 0).length;
 
+  const averageDaily = report.daily.length > 0 ? Math.round(report.pageViews / report.daily.length) : null;
+  const topPage = report.paths.filter((path) => path.count > 0).sort((left, right) => right.count - left.count)[0];
+  const disabled = !measurementEnabled && !stored;
+
   return (
     <div className="space-y-6">
-      <p className="text-sm leading-6 text-slate-600">
-        London period {report.period.start} to {report.period.end}.
-      </p>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Metric label="Page views" value={report.pageViews} detail="Aggregate page-view counter." />
-        <Metric label="Landing visits" value={report.visits} detail="Aggregate landing-visit counter." />
-      </div>
-      {stored ? null : (
+      {disabled ? (
+        <section className="rounded-lg border border-slate-200 bg-surface px-4 py-5">
+          <h3 className="text-sm font-semibold text-navy-900">Aggregate measurement is currently disabled.</h3>
+          <ul className="mt-3 space-y-1 text-sm leading-6 text-slate-600">
+            <li>Reporting infrastructure is installed.</li>
+            <li>No aggregate measurements have been collected.</li>
+            <li>Historical figures will appear after measurement is approved and activated.</li>
+          </ul>
+        </section>
+      ) : null}
+      {stored || measurementEnabled ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Page views" value={report.pageViews} detail="Recorded page views." />
+          <Metric label="Landing visits" value={report.visits} detail="Recorded landing visits." />
+          {stored && averageDaily !== null ? (
+            <Metric label="Average daily page views" value={averageDaily} detail="Across the dates in this report." />
+          ) : null}
+          {topPage ? <Metric label="Most visited page" value={topPage.count} detail={topPage.name} /> : null}
+        </div>
+      ) : null}
+      {!stored && measurementEnabled ? (
         <p className="rounded-lg border border-dashed border-slate-200 bg-surface px-4 py-5 text-sm leading-6 text-slate-600">
           No analytics data available for this period.
         </p>
-      )}
+      ) : null}
+      {stored ? <DailyChart daily={report.daily} /> : null}
       {stored && report.partialDates.length > 0 ? (
         <p className="text-sm leading-6 text-slate-600">
           Some dates are partial because a counter had reached its retention time: {report.partialDates.join(", ")}.
@@ -355,6 +391,32 @@ function ReportView({
         resetKey={`${report.period.start}:${report.period.end}:${pageSize}`}
       />
     </div>
+  );
+}
+
+function DailyChart({ daily }: { daily: AggregateReport["daily"] }) {
+  const plotted = daily.filter((day) => day.pageViews > 0 || day.visits > 0);
+  if (plotted.length === 0) return null;
+  const peak = Math.max(...plotted.map((day) => Math.max(day.pageViews, day.visits)), 1);
+  return (
+    <section className="space-y-3">
+      <h2 className="font-display text-2xl text-navy-900">Daily page views and landing visits</h2>
+      <ul className="space-y-3">
+        {plotted.map((day) => (
+          <li key={day.date} className="grid gap-1 sm:grid-cols-[7rem_1fr] sm:items-center">
+            <span className="text-sm text-slate-600">{day.date}</span>
+            <div className="space-y-1">
+              <div className="h-2 rounded bg-slate-100">
+                <div className="h-2 rounded bg-navy-900" style={{ width: `${(day.pageViews / peak) * 100}%` }} />
+              </div>
+              <p className="text-xs text-slate-600">
+                {day.pageViews} page views, {day.visits} landing visits
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

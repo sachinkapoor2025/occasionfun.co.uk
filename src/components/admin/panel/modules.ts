@@ -49,7 +49,7 @@ export const adminSections: readonly AdminSection[] = [
   {
     id: "marketing",
     label: "Email Marketing",
-    summary: "Campaigns and suppressions.",
+    summary: "Contacts, campaigns, and marketing SMTP for the demo.",
   },
   {
     id: "knowledge",
@@ -66,7 +66,7 @@ export const adminSections: readonly AdminSection[] = [
 export const overviewCounts = [
   {
     label: "Total visitors",
-    detail: "No visitor store is connected. This panel does not count visits.",
+    detail: "Distinct visitors with a consent-based page view, when the administration API is available.",
   },
   {
     label: "Total enquiries",

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
+import { AggregateMeasure } from "@/components/analytics/AggregateMeasure";
+import { AnalyticsCollector } from "@/components/analytics/AnalyticsCollector";
 import { CookieBanner } from "@/components/cookies/CookieBanner";
 import { SiteChrome } from "@/components/layout/SiteChrome";
 import { OrganisationJsonLd } from "@/components/seo/OrganisationJsonLd";
@@ -49,6 +51,8 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
+        <AnalyticsCollector />
+        <AggregateMeasure />
         <SiteChrome>{children}</SiteChrome>
         <CookieBanner />
       </body>

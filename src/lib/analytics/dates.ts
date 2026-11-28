@@ -89,6 +89,40 @@ export function formatUtcTimestamp(instant: Date): string {
  * on this calendar date. On the autumn change, local 00:00 occurs twice;
  * the earlier instant is the start of the London date.
  */
+/**
+ * Interpret a datetime-local value as Europe/London wall time and return UTC.
+ * During the autumn overlap the earlier instant is used. A spring-forward gap returns null.
+ */
+export function londonWallTimeToUtc(value: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  if (hour > 23 || minute > 59) return null;
+  const desired = Date.UTC(year, month - 1, day, hour, minute, 0);
+  const matches: Date[] = [];
+  for (const offsetMinutes of [0, 60, -60]) {
+    const candidate = new Date(desired - offsetMinutes * 60 * 1000);
+    const parts = londonParts(candidate);
+    if (
+      parts.year === year &&
+      parts.month === month &&
+      parts.day === day &&
+      parts.hour === hour &&
+      parts.minute === minute &&
+      parts.second === 0
+    ) {
+      matches.push(candidate);
+    }
+  }
+  if (matches.length === 0) return null;
+  matches.sort((left, right) => left.getTime() - right.getTime());
+  return matches[0].toISOString();
+}
+
 export function londonMidnightUtc(londonDay: string): Date {
   const match = DATE_PATTERN.exec(londonDay);
   if (!match) {

@@ -23,7 +23,7 @@ export const policyDocuments: PolicyDocument[] = [
     id: "cookie-notice",
     title: "Cookie notice",
     description:
-      "Draft cookie notice describing essential and optional cookies. Requires legal review.",
+      "Draft cookie notice. Essential storage and optional analytics consent are described. Collection starts only after analytics consent. Requires legal review.",
     status: "published",
     href: "/cookies",
   },

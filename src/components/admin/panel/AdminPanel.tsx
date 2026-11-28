@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { fetchEnquirySummary, type EnquirySummary } from "@/lib/admin/api";
 import { currentAccessToken } from "@/lib/admin/auth";
 import { AggregateBoard } from "./AggregateBoard";
+import { VisitorsBoard } from "./VisitorsBoard";
 import { EnquiryBoard } from "./EnquiryBoard";
+import { MarketingDesk } from "./MarketingDesk";
 import { NotificationBoard } from "./NotificationBoard";
 import { adminSections, overviewCounts, type AdminSectionId } from "./modules";
 
@@ -54,6 +57,12 @@ export function AdminPanel({
           <div className="min-w-0 flex-1">
             <p className="truncate font-display text-xl text-navy-900">Admin Panel</p>
             <HealthStatus health={health} onRetry={onRetry} />
+            <Link
+              href="/cookies/"
+              className="text-sm font-semibold text-accent underline-offset-2 hover:underline"
+            >
+              Cookie settings
+            </Link>
           </div>
           <Button type="button" variant="ghost" className="shrink-0 px-3 py-2" onClick={onSignOut}>
             Sign out
@@ -142,12 +151,12 @@ function SectionBody({
   onUnauthorised?: () => void;
 }) {
   if (id === "overview") return <Overview health={health} onUnauthorised={onUnauthorised} />;
-  if (id === "visitors") return <Visitors />;
+  if (id === "visitors") return <Visitors health={health} onUnauthorised={onUnauthorised} />;
   if (id === "aggregate") return <Aggregate health={health} onUnauthorised={onUnauthorised} />;
   if (id === "enquiries") return <Enquiries health={health} onUnauthorised={onUnauthorised} />;
   if (id === "conversations") return <Conversations />;
   if (id === "notifications") return <Notifications health={health} onUnauthorised={onUnauthorised} />;
-  if (id === "marketing") return <Marketing />;
+  if (id === "marketing") return <Marketing health={health} onUnauthorised={onUnauthorised} />;
   if (id === "knowledge") return <Knowledge />;
   return <Access />;
 }
@@ -257,17 +266,21 @@ function Aggregate({
   return <AggregateBoard onUnauthorised={onUnauthorised} />;
 }
 
-function Visitors() {
-  return (
-    <div className="space-y-4">
+function Visitors({
+  health,
+  onUnauthorised,
+}: {
+  health: PanelHealth;
+  onUnauthorised?: () => void;
+}) {
+  if (health !== "ok" || !onUnauthorised) {
+    return (
       <NotConnected>
-        No visitor records are available. The public site stores only this browser’s cookie choice, under the name occasionfun-cookie-consent. Optional analytics are not installed, and no referral or activity feed is collected.
+        Consent-based page views can be listed when the administration API is available. This section does not show visitor identifiers.
       </NotConnected>
-      <p className="text-sm leading-6 text-slate-600">
-        Essential cookies stay limited to running the site. Optional analytics cookies are not set unless a visitor allows them, and none are loaded today.
-      </p>
-    </div>
-  );
+    );
+  }
+  return <VisitorsBoard onUnauthorised={onUnauthorised} />;
 }
 
 function Enquiries({
@@ -312,12 +325,21 @@ function Notifications({
   return <NotificationBoard onUnauthorised={onUnauthorised} />;
 }
 
-function Marketing() {
-  return (
-    <NotConnected>
-      Email marketing is not configured. There is no campaign list, recipient snapshot, suppression list, or provider connection for this panel to manage.
-    </NotConnected>
-  );
+function Marketing({
+  health,
+  onUnauthorised,
+}: {
+  health: PanelHealth;
+  onUnauthorised?: () => void;
+}) {
+  if (health !== "ok" || !onUnauthorised) {
+    return (
+      <NotConnected>
+        Contacts, campaigns, and marketing SMTP can be managed when the administration API is available.
+      </NotConnected>
+    );
+  }
+  return <MarketingDesk onUnauthorised={onUnauthorised} />;
 }
 
 function Knowledge() {

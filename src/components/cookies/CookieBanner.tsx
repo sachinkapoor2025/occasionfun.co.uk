@@ -1,60 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
-
-const STORAGE_KEY = "occasionfun-cookie-consent";
-
-type ConsentValue = "essential" | "all";
-
-function subscribe(onStoreChange: () => void) {
-  window.addEventListener("storage", onStoreChange);
-  window.addEventListener("occasionfun-cookie-consent", onStoreChange);
-  return () => {
-    window.removeEventListener("storage", onStoreChange);
-    window.removeEventListener("occasionfun-cookie-consent", onStoreChange);
-  };
-}
-
-function getConsentSnapshot() {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function getServerSnapshot() {
-  return "pending";
-}
+import {
+  CONSENT_SAVE_ERROR,
+  CONSENT_SAVE_INCOMPLETE,
+  CONSENT_WITHDRAW_ERROR,
+  CONSENT_WITHDRAW_UNPERSISTED,
+} from "@/lib/consent";
+import { useConsent } from "./useConsent";
 
 /**
  * Consent banner for UK cookie requirements.
- * Non-essential analytics are not loaded by default and remain inactive
- * until explicit consent is recorded. No analytics provider is installed yet.
+ * A version-1 choice is stored in this browser. Analytics collection starts only after Allow analytics.
  */
 export function CookieBanner() {
-  const consent = useSyncExternalStore(
-    subscribe,
-    getConsentSnapshot,
-    getServerSnapshot,
-  );
+  const consent = useConsent();
 
-  const saveConsent = useCallback((value: ConsentValue) => {
-    try {
-      window.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ value, updatedAt: new Date().toISOString() }),
-      );
-    } catch {
-      // Ignore storage failures; banner can reappear.
-    }
-    window.dispatchEvent(new Event("occasionfun-cookie-consent"));
-  }, []);
-
-  if (consent === "pending" || consent) {
+  if (!consent.ready || (consent.outcome !== "pending" && consent.saveError !== "save-incomplete")) {
     return null;
   }
 
@@ -69,9 +33,10 @@ export function CookieBanner() {
         <div className="max-w-3xl">
           <p className="text-sm font-semibold text-navy-900">Cookie preferences</p>
           <p className="mt-1 text-sm leading-relaxed text-slate-600">
-            We use essential cookies to make this site work. Optional analytics
-            cookies are not enabled by default and will not be set unless you
-            choose to allow them. See our{" "}
+            Essential storage is needed for this site to work, including
+            remembering this choice. Analytics storage is optional. Allowing
+            analytics stores a first-party page view for pages you open after
+            that choice. It does not store your IP address. See our{" "}
             <Link
               href="/cookies"
               className="font-semibold text-accent underline-offset-2 hover:underline"
@@ -80,17 +45,24 @@ export function CookieBanner() {
             </Link>
             .
           </p>
+          {consent.saveError ? (
+            <p role="alert" className="mt-2 text-sm font-semibold text-navy-900">
+              {consent.saveError === "withdraw-unpersisted"
+                ? CONSENT_WITHDRAW_UNPERSISTED
+                : consent.saveError === "withdraw-failed"
+                  ? CONSENT_WITHDRAW_ERROR
+                  : consent.saveError === "save-incomplete"
+                    ? CONSENT_SAVE_INCOMPLETE
+                    : CONSENT_SAVE_ERROR}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => saveConsent("essential")}
-          >
+          <Button type="button" variant="ghost" onClick={() => consent.choose("essential")}>
             Essential only
           </Button>
-          <Button type="button" onClick={() => saveConsent("all")}>
-            Allow optional cookies
+          <Button type="button" onClick={() => consent.choose("all")}>
+            Allow analytics
           </Button>
         </div>
       </Container>

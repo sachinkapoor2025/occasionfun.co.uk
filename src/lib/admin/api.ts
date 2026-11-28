@@ -504,6 +504,267 @@ function readDates(value: unknown): string[] | null {
 const ERROR_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 
+export type VisitorDayRow = {
+  day: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  source: (typeof SOURCE_VALUES)[number];
+  landingPath: string;
+};
+
+export type PageViewRow = {
+  pagePath: string;
+  occurredAt: string;
+  source: (typeof SOURCE_VALUES)[number];
+  referrerHost: string;
+  deviceCategory: (typeof DEVICE_VALUES)[number];
+  browserCategory: (typeof BROWSER_VALUES)[number];
+};
+
+export type VisitorActivity = {
+  period: { start: string; end: string; timeZone: typeof REPORTING_TIME_ZONE };
+  summary: {
+    recordedVisitors: number | null;
+    returningVisitors: number | null;
+    visitorDays: number | null;
+    truncated: boolean;
+  };
+  items: VisitorDayRow[];
+  nextOffset: number | null;
+};
+
+export type PageViewActivity = {
+  period: { start: string; end: string; timeZone: typeof REPORTING_TIME_ZONE };
+  summary: {
+    pageViews: number | null;
+    mostViewedPage: { path: string; count: number } | null;
+    truncated: boolean;
+  };
+  items: PageViewRow[];
+  nextOffset: number | null;
+};
+
+export type ActivityResult<T> =
+  | { status: "ok"; activity: T }
+  | { status: "unauthorized" }
+  | { status: "forbidden" }
+  | { status: "unavailable" }
+  | { status: "unconfigured" }
+  | { status: "invalid_range"; reason: AggregateRangeReason }
+  | { status: "invalid_query" };
+
+export type ActivityFilter = {
+  start: string;
+  end: string;
+  limit?: number;
+  offset?: number;
+  path?: string;
+  source?: string;
+};
+
+export async function fetchVisitorActivity(
+  accessToken: string,
+  filter: ActivityFilter,
+): Promise<ActivityResult<VisitorActivity>> {
+  return readActivity(accessToken, "analytics/visitors", filter, readVisitorActivity);
+}
+
+export async function fetchPageViewActivity(
+  accessToken: string,
+  filter: ActivityFilter,
+): Promise<ActivityResult<PageViewActivity>> {
+  return readActivity(accessToken, "analytics/page-views", filter, readPageViewActivity);
+}
+
+const HIDDEN_ACTIVITY_FIELDS = ["visitorId", "sessionId", "eventId", "ip", "sourceIp", "userAgent", "payloadHash"];
+
+async function readActivity<T>(
+  accessToken: string,
+  path: string,
+  filter: ActivityFilter,
+  parse: (body: unknown) => T | null,
+): Promise<ActivityResult<T>> {
+  const base = adminApiBase();
+  if (!base) return { status: "unconfigured" };
+  if (!accessToken) return { status: "unauthorized" };
+  const endpoint = adminEndpoint(base, path, accessToken, activityQuery(filter));
+  if (!endpoint) return { status: "unavailable" };
+  try {
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (response.status === 401) return { status: "unauthorized" };
+    if (response.status === 403) return { status: "forbidden" };
+    if (response.status === 400) return activityFailure(await response.json());
+    if (!response.ok) return { status: "unavailable" };
+    const parsed = parse(await response.json());
+    return parsed === null ? { status: "unavailable" } : { status: "ok", activity: parsed };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+function activityFailure(body: unknown): ActivityResult<never> {
+  const reason = body && typeof body === "object" ? (body as { error?: unknown }).error : undefined;
+  const matched = RANGE_REASONS.find((item) => item === reason);
+  if (matched) return { status: "invalid_range", reason: matched };
+  if (reason === "invalid_filter" || reason === "invalid_page") return { status: "invalid_query" };
+  return { status: "unavailable" };
+}
+
+function activityQuery(filter: ActivityFilter): Record<string, string> {
+  const query: Record<string, string> = { start: filter.start, end: filter.end };
+  if (filter.limit !== undefined) query.limit = String(filter.limit);
+  if (filter.offset !== undefined && filter.offset > 0) query.offset = String(filter.offset);
+  if (filter.path) query.path = filter.path;
+  if (filter.source) query.source = filter.source;
+  return query;
+}
+
+function readVisitorActivity(body: unknown): VisitorActivity | null {
+  if (!body || typeof body !== "object") return null;
+  const record = body as Record<string, unknown>;
+  const period = readPeriod(record.period);
+  const summary = record.summary;
+  if (!period || !summary || typeof summary !== "object" || !Array.isArray(record.items)) return null;
+  const counts = summary as Record<string, unknown>;
+  const recordedVisitors = nullableCount(counts.recordedVisitors);
+  const returningVisitors = nullableCount(counts.returningVisitors);
+  const visitorDays = nullableCount(counts.visitorDays);
+  if (recordedVisitors === undefined || returningVisitors === undefined || visitorDays === undefined) return null;
+  if (typeof counts.truncated !== "boolean") return null;
+  const items: VisitorDayRow[] = [];
+  for (const item of record.items) {
+    const row = readVisitorRow(item);
+    if (!row) return null;
+    items.push(row);
+  }
+  const nextOffset = readOffset(record.nextOffset);
+  if (nextOffset === undefined) return null;
+  return {
+    period,
+    summary: { recordedVisitors, returningVisitors, visitorDays, truncated: counts.truncated },
+    items,
+    nextOffset,
+  };
+}
+
+function readPageViewActivity(body: unknown): PageViewActivity | null {
+  if (!body || typeof body !== "object") return null;
+  const record = body as Record<string, unknown>;
+  const period = readPeriod(record.period);
+  const summary = record.summary;
+  if (!period || !summary || typeof summary !== "object" || !Array.isArray(record.items)) return null;
+  const counts = summary as Record<string, unknown>;
+  const pageViews = nullableCount(counts.pageViews);
+  if (pageViews === undefined || typeof counts.truncated !== "boolean") return null;
+  const mostViewedPage = readTopPage(counts.mostViewedPage);
+  if (mostViewedPage === undefined) return null;
+  const items: PageViewRow[] = [];
+  for (const item of record.items) {
+    const row = readPageViewRow(item);
+    if (!row) return null;
+    items.push(row);
+  }
+  const nextOffset = readOffset(record.nextOffset);
+  if (nextOffset === undefined) return null;
+  return { period, summary: { pageViews, mostViewedPage, truncated: counts.truncated }, items, nextOffset };
+}
+
+function readPeriod(value: unknown): VisitorActivity["period"] | null {
+  if (!value || typeof value !== "object") return null;
+  const period = value as Record<string, unknown>;
+  if (
+    typeof period.start !== "string" ||
+    typeof period.end !== "string" ||
+    period.timeZone !== REPORTING_TIME_ZONE ||
+    !LONDON_DATE.test(period.start) ||
+    !LONDON_DATE.test(period.end)
+  ) {
+    return null;
+  }
+  return { start: period.start, end: period.end, timeZone: REPORTING_TIME_ZONE };
+}
+
+function nullableCount(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return countValue(value);
+}
+
+function readOffset(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) return undefined;
+  return value;
+}
+
+function readTopPage(value: unknown): { path: string; count: number } | null | undefined {
+  if (value === null) return null;
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const count = countValue(record.count);
+  if (typeof record.path !== "string" || record.path.length === 0 || record.path.length > 120 || count === null) {
+    return undefined;
+  }
+  if (exposesHiddenField(record)) return undefined;
+  return { path: record.path, count };
+}
+
+function readVisitorRow(value: unknown): VisitorDayRow | null {
+  if (!value || typeof value !== "object" || exposesHiddenField(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.day !== "string" ||
+    !LONDON_DATE.test(record.day) ||
+    typeof record.firstSeenAt !== "string" ||
+    !TIMESTAMP.test(record.firstSeenAt) ||
+    typeof record.lastSeenAt !== "string" ||
+    !TIMESTAMP.test(record.lastSeenAt) ||
+    typeof record.landingPath !== "string" ||
+    !SOURCE_VALUES.includes(record.source as (typeof SOURCE_VALUES)[number])
+  ) {
+    return null;
+  }
+  return {
+    day: record.day,
+    firstSeenAt: record.firstSeenAt,
+    lastSeenAt: record.lastSeenAt,
+    source: record.source as VisitorDayRow["source"],
+    landingPath: record.landingPath,
+  };
+}
+
+function readPageViewRow(value: unknown): PageViewRow | null {
+  if (!value || typeof value !== "object" || exposesHiddenField(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.pagePath !== "string" ||
+    typeof record.occurredAt !== "string" ||
+    !TIMESTAMP.test(record.occurredAt) ||
+    typeof record.referrerHost !== "string" ||
+    record.referrerHost.length === 0 ||
+    record.referrerHost.length > 253 ||
+    !SOURCE_VALUES.includes(record.source as (typeof SOURCE_VALUES)[number]) ||
+    !DEVICE_VALUES.includes(record.deviceCategory as (typeof DEVICE_VALUES)[number]) ||
+    !BROWSER_VALUES.includes(record.browserCategory as (typeof BROWSER_VALUES)[number])
+  ) {
+    return null;
+  }
+  return {
+    pagePath: record.pagePath,
+    occurredAt: record.occurredAt,
+    source: record.source as PageViewRow["source"],
+    referrerHost: record.referrerHost,
+    deviceCategory: record.deviceCategory as PageViewRow["deviceCategory"],
+    browserCategory: record.browserCategory as PageViewRow["browserCategory"],
+  };
+}
+
+function exposesHiddenField(value: object): boolean {
+  return Object.keys(value).some((key) => HIDDEN_ACTIVITY_FIELDS.includes(key));
+}
+
 function deliveryFields(
   record: Record<string, unknown>,
 ): Pick<Enquiry, "notificationAttempts" | "lastNotificationError" | "notifiedAt"> {

@@ -48,9 +48,29 @@ export default function PrivacyPage() {
             <p className="mt-3">
               If you submit the contact form, we may collect your name,
               organisation, work email, phone number (if provided), enquiry type
-              and message content, together with technical metadata needed to
-              secure the form (such as approximate request timing and network
-              identifiers used for rate limiting).
+              and message content. The deployed contact service stores those
+              enquiry details. It does not store your IP address for analytics
+              or for rate limiting.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl text-navy-900">Website analytics</h2>
+            <p className="mt-3">
+              If you allow analytics, this website stores a first-party page
+              view after that choice. The record can include the page, the time,
+              a coarse device and browser category, the referring site name, and
+              a random visitor reference. It does not include your IP address,
+              precise location, or a device fingerprint. This website does not
+              use Google Analytics or Google Tag Manager.
+            </p>
+            <p className="mt-3">
+              Stored analytics records are kept for up to 90 days and then
+              expire. Returning to essential only stops further collection and
+              removes the analytics references from this browser. It does not
+              immediately delete a record already stored. This notice is still a
+              draft and needs legal review. A reviewed lawful basis, processor
+              list, and international-transfer statement are not stated here.
             </p>
           </section>
 

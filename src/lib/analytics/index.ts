@@ -50,3 +50,14 @@ export {
 } from "./recovery";
 
 export { aggregateReport, selectJourneyPage } from "./report";
+
+export {
+  UNKNOWN_COUNTRY,
+  acceptAggregateMeasurement,
+  counterKey,
+  normaliseCountryCode,
+} from "./aggregate";
+
+export { sourceFromReferrer } from "./referrer-source";
+
+export { aggregateStatistics } from "./aggregate-report";
